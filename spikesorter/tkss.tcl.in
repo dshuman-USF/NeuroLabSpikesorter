@@ -1,0 +1,1203 @@
+#!/usr/local/bin/tkss
+
+wm title . "@PACKAGE_STRING@"
+
+bind . <Key-Left> {shift 1}
+bind . <Key-Right> {shift -1}
+
+
+# tcss.tcl
+# Copyright © 2003 University of South Florida
+
+set SNAPLEN 64.0
+set SF 25000.0
+option add *Font {Helvetica -18 bold} startup
+
+proc set_merge_delete {} {
+    global selectcount units selected
+
+    if {$selectcount == 0} {
+	if {[llength [get_all]] != [llength [eval get_members $units]]} {
+	    .bdel configure -text UNDELETE -state normal
+	} else {
+	    .bdel configure -text UNDELETE -state disabled
+	}
+    } else {
+	.bdel configure -text DELETE -state normal
+    }
+    if {$selectcount == 0} {
+	if {[llength [eval get_members $units]] != [llength $units]} {
+	    .bmerge configure -text UNMERGE -state normal
+	} else {
+	    .bmerge configure -text UNMERGE -state disabled
+	}
+    } elseif {$selectcount == 1} {
+	if {[llength [get_members $selected]] > 1} {
+	    .bmerge configure -text UNMERGE -state normal
+	} else {
+	    .bmerge configure -text UNMERGE -state disabled
+	}
+    } else {
+	.bmerge configure -text MERGE -state normal
+    }
+}
+		
+set selectcount 0
+proc select {this args} {
+    global units spl splot selected uptodate pos_file anal selectcount binstart binend unclassified_unit unclassified_count
+    global cb$this
+    set unit_count [llength $units]
+
+    set this_id [lindex $units $this]
+    if {[set cb$this]} {
+	lappend selected $this_id
+    } else {
+	set n [lsearch -exact $selected $this_id]
+	if {$n == -1} {puts "FATAL BUG in tkss.tcl: cluster $this_id is being deselected but is not selected"}
+	set selected [lreplace $selected $n $n]
+    }
+
+    set uptodate($this) 0
+    for {set selectcount 0; set n 0} {$n < $unit_count} {incr n} {
+	global cb$n
+	if {[info exists cb$n] && [set cb$n] == 1} {
+	    incr selectcount
+	    set an $n
+	    set a [lindex $units $n]
+	    set ai $n
+	    if {[lsearch -exact $selected $a] == -1} {error "FATAL BUG in tkss.tcl: list of selected clusters does not match button state"}
+	    set uptodate($n) 0
+	    break;
+	}
+    }
+    set b -1
+    set bi -1
+    for {incr n} {$n < $unit_count} {incr n} {
+	global cb$n
+	if {[info exists cb$n] && [set cb$n] == 1} {
+	    incr selectcount
+	    set bn $n
+	    set b [lindex $units $n]
+	    set bi $n
+	    if {[lsearch -exact $selected $b] == -1} {error "FATAL BUG in tkss.tcl: list of selected clusters does not match button state"}
+	    set uptodate($n) 0
+	}
+    }
+    if {$selectcount != [llength $selected]} {error "FATAL BUG in tkss.tcl: list of selected clusters does not match button state"}
+    set_merge_delete
+    for {set n 0} {$n < $unit_count} {incr n} {
+	if {[set cb$n] == 1} {
+	    set members [eval get_members $selected]
+	    set anal($n) [eval exec isi_pos {$pos_file} $binstart $binend $members 2> isi_pos.err]
+	}
+    }
+    if {[set cb$this] == 0} {
+	set members [get_members [lindex $units $this]]
+	set anal($this) [eval exec isi_pos {$pos_file} $binstart $binend $members 2> isi_pos.err]
+    }
+
+    update_hist 0
+
+    set classified_count [expr $unit_count - $unclassified_count]
+    set classified_selectcount 0
+    for {set n 0} {$n < $classified_count} {incr n} {
+	if {[set cb$n] == 1} {
+	    incr classified_selectcount
+	}
+    }
+    if {$args == "no_splot"} return
+    if {$selectcount == $classified_selectcount && ($selectcount == 2 || ($selectcount == 1 && $classified_count == 1))} {
+	if {![winfo exists .tsplot]} {
+	    toplevel .tsplot
+	    wm title .tsplot SCATTERPLOT
+	    move_tl .tsplot
+	    set splot [get_splot $spl $a $b 0 $ai $bi]
+	    square .tsplot.sqspl -relief flat -bg white -bd 5 -type 2 -dbl 0
+            .tsplot.sqspl configure -data $splot
+	    label .tsplot.lda -bg white
+	    label .tsplot.ldb -bg white
+	    label .tsplot.ldab -bg white
+	    button .tsplot.bc -text CANCEL -command {destroy .tsplot}
+	    wm geometry .tsplot 800x[expr 600 + [winfo reqheight .tsplot.bc]]-10-50
+
+	    pack .tsplot.sqspl -expand 1 -fill both
+	    bind .tsplot <Configure> splot_aspect
+	    pack .tsplot.lda .tsplot.ldb .tsplot.ldab -side left -expand 1 -fill both -ipady 4
+	    pack .tsplot.bc
+	} else {
+	    get_splot $spl $a $b $splot $ai $bi
+	    event generate .tsplot.sqspl <Configure>
+	}
+	global lda ldb ldab spla splb
+        set spla $a
+        set splb $b
+
+	.tsplot.lda configure -fg [get_color [expr $a - 1]] -text "$a-0:  [fromzero $spl $an]"
+	if {$b > 0} {
+	    .tsplot.ldb configure -fg [get_color [expr $b - 1]] -text "$b-0:  [fromzero $spl $bn]"
+	    .tsplot.ldab configure -text "$a-$b:  [get_distance $splot]"
+	}
+
+    }
+}
+
+proc make_widgets {} {
+    global plotcnt showcnt maxbin xavar anal units
+    set unit_count  [llength $units]
+    for {set n $plotcnt} {$n < $unit_count} {incr n} {
+	frame .fsq$n
+	checkbutton .cb$n -command "select $n"
+	square .sqw$n -relief flat -bg white -bd 5 -type 1 -color [get_color [expr [lindex $units $n] - 1]]
+	label .lcl$n
+	frame .fsp$n -relief flat -height 10
+	frame .fy$n -bg white
+	label .yaxis$n -bg white -bd 0 -textvariable maxbin($n)
+	square .sq$n -relief flat -bg white -bd 5
+	frame .fx$n -bg white
+	label .xaxis$n -bg white -bd 0 -textvariable xavar($n)
+	label .anal$n -textvariable anal($n) -height 5 -anchor nw -wraplength 0 -justify left -width 5
+	set maxbin($n) ""
+	set xavar($n) ""
+	set anal($n) ""
+	pack .cb$n -in .fsq$n -fill x
+	pack .sqw$n -in .fsq$n -side top -expand 1 -fill both
+	pack .lcl$n -in .fsq$n
+	pack .fsp$n -side top -in .fsq$n -fill x
+	pack .fy$n -side top -in .fsq$n -fill x
+	pack .yaxis$n -in .fy$n -side left
+	pack .sq$n -in .fsq$n -side top -expand 1 -fill both
+	pack .fx$n -in .fsq$n -side top -fill x
+	pack .xaxis$n -in .fx$n -side right
+	pack .anal$n -in .fsq$n -side top -fill x
+    }
+    if {$plotcnt < $unit_count} {set plotcnt $unit_count}
+}
+
+proc repack {} {
+    global showstart showcnt units
+    set unit_count  [llength $units]
+    for {set n 0} {$n < $unit_count} {incr n} {
+	pack forget .fsq$n
+    }
+    for {set n 0} {$n < $showcnt} {incr n} {
+	pack .fsq[expr $showstart + $n] -in .fsq -side left -expand 1 -fill both -padx 5
+    }
+}
+
+proc update_hist {force} {
+    global showcnt showstart uptodate hist binsize pos bincnt maxbin xavar anal units waves wdt pos_file binstart binend
+    global selected
+    for {set n 0} {$n < $showcnt} {incr n} {
+	set uidx [expr $showstart + $n]
+	if {!$uptodate($uidx) || $force} {
+	    global cb$uidx
+	    set unit [lindex $units $uidx]
+
+	    if {![info exists hist($uidx)]} {set hist($uidx) 0}
+
+	    if {[info exists cb$uidx] && [set cb$uidx] == 1} {
+		set hist($uidx) [eval get_hist $pos $binsize $bincnt $hist($uidx) $selected]
+		set members [eval get_members $selected]
+	    } else {
+		set hist($uidx) [eval get_hist $pos $binsize $bincnt $hist($uidx) $unit]
+		set members [get_members $unit]
+	    }
+	    .sq$uidx configure -data $hist($uidx)
+	    set maxbin($uidx) [get_maxbin $hist($uidx)]
+	    set xavar($uidx) "[format {%.1f} [expr $binsize * $bincnt]] ms"
+	    set uptodate($uidx) 1
+	    if {$force} {
+		set anal($uidx) [eval exec isi_pos {$pos_file} $binstart $binend $members 2> isi_pos.err]
+	    }
+	}
+    }
+}
+
+proc update_t_hist {} {
+    global showcnt showstart uptodate hist binstart binend pos tbincnt tmaxbin txavar txavar0 units waves wdt
+    global selected hist_type
+    if {![winfo exists .ttl]} {
+	return
+    }
+    for {set n 0} {$n < $showcnt} {incr n} {
+	set uidx [expr $showstart + $n]
+	set unit [lindex $units $uidx]
+
+	if {![info exists t_hist($uidx)]} {set t_hist($uidx) 0}
+
+	set t_hist($uidx) [eval get_t_hist $pos $binstart $binend $tbincnt $t_hist($uidx) $unit]
+	.ttl.sq$uidx configure -data $t_hist($uidx) -color [get_color [expr $unit - 1]]
+	set tmaxbin($uidx) [get_maxbin $t_hist($uidx)]
+#	set txavar "[expr $binstart / 60000] - [expr $binend / 60000] min"
+	set txavar0 [format "%.5f" [expr $binstart / 1000]]
+	set txavar [format "%.5f" [expr $binend / 1000]]
+    }
+    write_bounds
+}
+
+proc scroll {cmd args} {
+    global showstart showcnt units
+    set unit_count  [llength $units]
+    set maxstart [expr $unit_count - $showcnt]
+    set amt [lindex $args 0]
+    if {$cmd == "moveto"} {
+	set new [expr round ($amt * $unit_count)]
+    } elseif {[lindex $args 1] == "units"} {
+	set new [expr $showstart + $amt]
+    } else {
+	set new [expr $showstart + $amt * $showcnt]
+    }
+    if {$new < 0} {
+	set new 0
+    } elseif {$new > $maxstart} {
+	set new $maxstart
+    }
+    if {$new != $showstart} {
+	if {[winfo exists .ttl]} {destroy .ttl}
+	set showstart $new
+	.sb set [expr $showstart.0 / $unit_count]  [expr ($showstart.0 + $showcnt) / $unit_count]
+	update_hist 0
+	repack
+    }
+}
+
+proc in {} {
+    global showstart showcnt units
+    set unit_count  [llength $units]
+    if {$showcnt > 1} {
+	if {[winfo exists .ttl]} {destroy .ttl}
+	if {$showcnt == $unit_count} {
+	    .bout configure -state normal
+	    pack .sb -after .fsq -fill x
+	}
+	incr showcnt -1
+	.sb set [expr $showstart.0 / $unit_count]  [expr ($showstart.0 + $showcnt) / $unit_count]
+	if {$showcnt == 1} {
+	    .bin configure -state disabled
+	}
+	repack
+    }
+}
+
+proc out {} {
+    global showstart showcnt units
+    set unit_count [llength $units]
+    if {$showcnt < $unit_count} {
+	if {[winfo exists .ttl]} {destroy .ttl}
+	if {$showcnt == 1} {
+	    .bin configure -state normal
+	}
+	incr showcnt
+	set maxstart [expr $unit_count - $showcnt]
+	if {$showstart > $maxstart} {
+	    set showstart $maxstart
+	}
+	if {$showcnt == $unit_count} {
+	    .bout configure -state disabled
+	    pack forget .sb
+	} else {
+	    .sb set [expr $showstart.0 / $unit_count]  [expr ($showstart.0 + $showcnt) / $unit_count]
+	}
+	repack
+	update_hist 0
+    }
+}
+
+proc set_binsize {ignore} {
+    global units uptodate
+    set unit_count [llength $units]
+    for {set n 0} {$n < $unit_count} {incr n} {
+	set uptodate($n) 0
+    }
+    update_hist 0
+}
+
+proc check_status {name pid} {
+    if {[lindex [waitpid $pid nohang] 0] == 0} {
+	after 1000 check_status $name $pid
+    } else {
+	puts "$name done"
+	tk_dialog .check_status "Please note" "$name done" "" 0 "OK"
+    }
+}
+
+proc get_resdir {} {
+    global last_resdir
+    set resdir [tk_chooseDirectory -title "CHOOSE DIRECTORY FOR RESULTS" -initialdir $last_resdir]
+    if {$resdir == ""} return ""
+    if {![file isdirectory $resdir]} {
+	file mkdir $resdir
+    }
+    cd $resdir
+    set last_resdir $resdir
+    return $resdir
+}
+
+proc split_abf {} {
+    global last_abfdir
+    set abf_file [tk_getOpenFile -filetypes {{"abf files"		{.abf .ABF}	}} -initialdir $last_abfdir]
+    if {$abf_file == ""} return
+    regexp {(.*[\\/])[^\\/]*$} $dmx_file all last_abfdir
+    if {[get_resdir] == ""} return
+    set chan [channels]
+    if {$chan != -1} {
+	set pid [eval exec split_merge_abf {$abf_file} $chan &]
+#	set pid [eval exec printargs split_merge_abf {$abf_file} $chan &]
+	check_status split_merge_abf $pid
+    }
+}
+
+proc split_dmx {} {
+    global last_dmxdir
+    set dmx_file [tk_getOpenFile -initialdir $last_dmxdir]
+    if {$dmx_file == ""} return
+    regexp {(.*[\\/])[^\\/]*$} $dmx_file all last_dmxdir
+    if {[get_resdir] == ""} return
+    set chan [channels]
+    if {$chan != -1} {
+	set pid [eval exec dmx {$dmx_file} $chan &]
+#	set pid [eval exec printargs dmx {$dmx_file} $chan &]
+	check_status dmx $pid
+    }
+}
+
+proc threshold {} {
+    global val
+    toplevel .tth
+    move_tl .tth
+    label .tth.l -text "Enter detection threshold or leave blank"
+    entry .tth.e -width 57
+    button .tth.bok -text OK -command {set val [.tth.e get]; destroy .tth}
+    button .tth.bcn -text CANCEL -command {set val -1; destroy .tth}
+    pack .tth.l .tth.e -pady 5
+    pack .tth.bok .tth.bcn -side left -pady 5 -expand 1
+    tkwait window .tth
+    return $val
+}
+
+proc spikesort {} {
+    global last_spikesort_dir
+    
+    set debug 0
+    set types {
+	{"dmx or chan" {.001 .002 .chan .filt}}
+	{"all files" *}
+    }
+    set chan_file [tk_getOpenFile -filetypes  $types -initialdir $last_spikesort_dir]
+    if {$chan_file == ""} return
+    set last_spikesort_dir [file dir $chan_file]
+    if {[get_resdir] == ""} return
+    if {[regexp {(.*)(\.001$|\.002$)} $chan_file all base ext]} {
+	while {1} {
+	    set chan [channels "Enter channel"]
+	    if {$chan == -1} return
+	    if {[string is integer $chan] && $chan > 0} break
+	    tk_dialog .err "Error" "invalid channel: $chan" "" 0 "OK"
+	}
+	set chan_file [format "$base%02d$ext" $chan]
+	set thresh ""
+	if {0} {set thresh [threshold]; if {$thresh == -1} return}
+	puts "\nspikesort \"$chan_file\" $thresh"
+	if {$debug} {
+	    set pid [eval exec time --portability printargs spikesort {$chan_file} $thresh &]
+	} else {
+	    set pid [eval exec spikesort {$chan_file} $thresh &]
+	}
+	check_status spikesort $pid
+    } else {
+	set thresh ""
+	if {0} {set thresh [threshold]; if {$thresh == -1} return}
+	puts "\nspikesort \"$chan_file\" $thresh"
+	if {$debug} {
+	    set pid [eval exec time --portability printargs spikesort {$chan_file} $thresh &]
+	} else {
+	    set pid [eval exec spikesort {$chan_file} $thresh &]
+	}
+	check_status spikesort $pid
+    }
+}
+
+proc split_dmx_or_abf {} {
+    global last_split_dir last_resdir last_spikesort_dir
+    
+    set debug 0
+    set types {
+	{"dmx or abf" {.001 .002 .abf .ABF}}
+	{"all files" *}
+    }
+    set chan_file [tk_getOpenFile -filetypes  $types -initialdir $last_split_dir]
+    if {$chan_file == ""} return
+    set last_split_dir [file dir $chan_file]
+    if {[get_resdir] == ""} return
+    set last_spikesort_dir $last_resdir
+    if {[regexp {(.*)(\.001$|\.002$)} $chan_file all base ext]} {
+	while {1} {
+	    set chan [channels "Enter channel"]
+	    if {$chan == -1} return
+	    if {[string is integer $chan] && $chan > 0 && $chan <= 88} break
+	    tk_dialog .err "Error" "invalid channel: $chan" "" 0 "OK"
+	}
+	set thresh ""
+	puts "\ndmx \"$chan_file\" $chan"
+	if {$debug} {
+	    set pid [eval exec time --portability printargs dmx {$chan_file} $chan &]
+	} else {
+	    set pid [eval exec dmx {$chan_file} $chan &]
+	}
+	check_status split_dmx $pid
+    } elseif {[regexp -nocase {(.*)(\.abf$|\.abf$)} $chan_file all base ext]} {
+	set chan [channels "List desired channels separated by spaces (blank for all)"]
+	if {$chan != -1} {
+	    if {$debug} {
+		set pid [eval exec printargs split_merge_abf {$chan_file} $chan &]
+	    } else {
+		set pid [eval exec split_merge_abf {$chan_file} $chan &]
+	    }
+	    check_status split_merge_abf $pid
+	}
+    }
+}
+
+proc show_msg {pos_file} {
+    set root [file rootname $pos_file]
+    set msgfile [open $root.msg]
+    set msg [read $msgfile]
+    close $msgfile
+    tk_dialog .results "NO SPIKES" $msg "" 0 "OK"
+}
+
+proc get_latest_merge_backup {} {
+    global latest_merge_backup pos
+    set mrg [pos_retype $pos ".mrg"]
+    set versions [glob -nocomplain $mrg.~*~]
+    regsub -all {[^~]*~(\d+)~} $versions { \1} versions
+    set versions [lsort -integer -decreasing $versions]
+    if {[llength $versions] == 0} {
+	set latest_merge_backup 0
+    } else {
+	set latest_merge_backup [lindex $versions 0]
+    }
+}
+
+proc results {filename} {
+    global pos units pos_file showcnt showstart wdt uptodate anal spl mwaves last_resdir stopgo
+    global binstart binend last_time unclassified_unit unclassified_count selected selectcount
+    global waves latest_merge_backup
+    if {$filename == ""} return
+    set last_resdir [file dirname $filename]
+    if {[winfo exists .tlm.sqm] && [.tlm.sqm cget -run] == 1} {
+	set stopgo GO
+	.tlm.sqm configure -run 0
+	return
+    }
+    set showcnt 0; repack; set units ""; set unclassified_unit ""
+    set pos_file $filename
+    if {![regexp {(.*)\.[^.]*$} $pos_file all noext]} {
+	set noext $pos_file
+    }
+    .lfile configure -text $noext
+    set pos [open_pos $pos_file $pos]
+    if {[file size $pos_file] == 0} {
+	show_msg $pos_file
+	return
+    }
+    get_latest_merge_backup
+
+    set binstart 0
+    set binend [get_last_time $pos]
+    set last_time $binend
+    set wdt [open_wdt $pos_file $wdt]
+
+    if {$wdt eq ""} {
+	tk_dialog .results "Error" "Can't open .wdt file" "" 0 "OK"
+	set units [get_units $pos]
+	set showcnt [llength $units]
+	set showstart 0
+	return
+    }
+
+    set spl [open_spl $pos_file $spl]
+    if {$pos == "" || $wdt == "" || $spl == ""} {
+	tk_dialog .results "Error" "results missing for $pos_file" "" 0 "OK"
+	return
+    }
+    set units [get_units $pos]
+    if {$units == ""} {
+	if {$latest_merge_backup == 0} {
+	    regexp {[^\\/]*$} $pos_file base
+	    tk_dialog .results "NO SPIKES" "no spikes found in\n$base" "" 0 "OK"
+	    return
+	} else {
+	    tk_dialog .results "NO SPIKES" "all clusters deleted" "" 0 "OK"
+	}
+    }
+    destroy .tsplot
+    destroy .tlm
+
+    set showstart 0
+    set unit_count [llength $units]
+    set showcnt $unit_count
+    if {$unit_count > 5} {
+	.bout configure -state normal
+	pack .sb -after .fsq -fill x
+	set showcnt 5
+	.sb set [expr $showstart.0 / $unit_count]  [expr ($showstart.0 + $showcnt) / $unit_count]
+    }
+    set selected ""
+    set selectcount 0
+    set_merge_delete
+
+    make_widgets
+    repack
+    for {set n 0} {$n < $unit_count} {incr n} {
+	set unit [lindex $units $n]
+#	set anal($n) [exec isi [string replace $pos_file end-2 end "edt"] $unit]
+	set members [get_members $unit]
+	set anal($n) [eval exec isi_pos {$pos_file} $binstart $binend $members 2> isi_pos.err]
+	.lcl$n configure -text "cluster [lindex $units $n]"
+	set uptodate($n) 0
+	global cb$n
+	set cb$n 0
+	if {![info exists waves($n)]} {set waves($n) 0}
+	set waves($n) [get_waves $wdt $unit $waves($n)]
+	.sqw$n configure -color [get_color [expr $unit - 1]]
+	.sqw$n configure -data $waves($n)
+    }
+    set unclassified_count [llength $unclassified_unit]
+    update_hist 0
+    .bin configure -state normal
+    if {$showcnt == $unit_count} {
+	.bout configure -state disabled
+	pack forget .sb
+    }
+}
+
+proc reconfigure_waves {} {
+    global units waves
+    set unit_count [llength $units]
+    for {set n 0} {$n < $unit_count} {incr n} {
+	set unit [lindex $units $n]
+	.sqw$n configure -color [get_color [expr $unit - 1]]
+	.sqw$n configure -data $waves($n)
+    }
+}
+
+set ymag 1
+set current_merge_version ""
+set unclassified_unit ""
+set unclassified_count 0
+set selected ""
+set do_region 0
+set pick_x -1
+set startdir [pwd]
+set mwaves 0
+set pos 0
+set wdt 0
+set spl 0
+set binsize .5
+set bincnt 100
+set tbincnt 1000
+set plotcnt 0
+set showcnt 0
+set units ""
+set pos_file ""
+set last_resdir [pwd]
+set last_chosen_resdir ""
+set last_abfdir [pwd]
+set last_dmxdir [pwd]
+set last_spikesort_dir [pwd]
+set last_split_dir X:/DataMAX
+set hist_type "get_hist"
+if {![file isdir $last_split_dir]} {
+    set last_split_dir [pwd]
+}
+
+proc splot_aspect {} {
+    global old_w old_h max_h
+    
+    if {[winfo ismapped .tsplot] && [winfo ismapped .tsplot.sqspl]} {
+	set w [winfo width .tsplot.sqspl]
+	set h [winfo height .tsplot.sqspl]
+	if {![info exists old_w]} {
+	    set old_w 0
+	    set old_h 0
+	    set max_h [lindex [wm maxsize .tsplot] 1]
+	}
+	if {($w != $old_w || $h != $old_h) && $h != $w / 4 * 3} {
+	    set old_w $w
+	    set old_h $h
+	    set max_w [expr ($max_h - [winfo reqheight .tsplot.bc] - [winfo rooty .tsplot] - 50) / 3 * 4]
+	    if {$w > $max_w} {
+		set w $max_w
+	    }
+	    wm geometry .tsplot ${w}x[expr $w / 4 * 3 + [winfo reqheight .tsplot.bc]]-10-50
+	}
+    }
+}
+
+proc move_tl {tl} {
+    set sw [winfo screenwidth $tl]
+    set sh [winfo screenheight $tl]
+    set g [string map  {x " " + " " - " -"} [wm geometry .]]
+    set mw [expr [lindex $g 0] + 8]
+    set mg [lindex $g 1]
+    set mx [expr [lindex $g 2] - 4]
+    set my [lindex $g 3]
+#    if {$mx < 0} {set mx [expr $sw - $mw + $mx]}
+#    if {$my < 0} {set my [expr $sh - $mh + $my]}
+    set rw [winfo reqwidth $tl]
+    set rh [winfo reqheight $tl]
+    set x [expr $mx + $mw + 4]
+    if {[expr $x + $rw] > $sw} {
+	set x [expr $sw - $rw - 8]
+    }
+    wm geometry $tl +$x+$my
+}
+
+proc stop_go {} {
+    global selectcount moviedir stopgo
+    if {[.tlm.sqm cget -run] != 0} {
+	.tlm.sqm configure -run 0
+	set stopgo GO
+    } elseif {$selectcount > 0} {
+	.tlm.sqm configure -run $moviedir
+	set stopgo STOP
+    }
+}
+
+proc fwd_rev {} {
+    global moviedir stopgo
+    set was [.tlm.sqm cget -run]
+    .tlm.sqm configure -run 0
+    if {$moviedir != 1} {
+	set moviedir 1
+	.tlm.bfwd configure -text FWD
+    } else {
+	set moviedir -1
+	.tlm.bfwd configure -text REV
+    }
+    if {abs ($was) == 1} {
+	.tlm.sqm configure -run $moviedir
+	set stopgo STOP
+    }
+}
+
+proc white_raw {} {
+    global show_whitened moviedir
+    set was [.tlm.sqm cget -run]
+    .tlm.sqm configure -run 0
+    if {$show_whitened != 1} {
+	set show_whitened 1
+	.tlm.braw configure -text WHITE
+    } else {
+	set show_whitened 0
+	.tlm.braw configure -text RAW
+    }
+    .tlm.sqm configure -run $was
+#    .tlm.sqm configure -run 0
+#    .tlm.bgo configure -text GO
+}
+
+proc step {} {
+    global moviedir spiketime do_region pos_file stopgo
+    .tlm.sqm configure -run [expr 2 * $moviedir]
+    set stopgo GO
+    .tlm.ledt configure -text [expr int ($spiketime * 25000.0 + .5)]
+    if {$do_region == 1} {
+	.tlm.bregion configure -text [exec spiketime_to_region $pos_file $spiketime]
+    } else {
+	.tlm.bregion configure -text ""
+    }
+}
+
+proc newtime {} {
+    global spiketime do_region pos_file stopgo
+    .tlm.sqm configure -run 0
+    set stopgo GO
+    if {$spiketime == 0} {
+	set spiketime 1e-300
+    }
+    .tlm.sqm configure -time $spiketime -run 2
+    .tlm.ltime selection clear
+    focus .tlm.sqm
+    .tlm.ledt configure -text [expr int ($spiketime * 25000.0 + .5)]
+    if {$do_region == 1} {
+	.tlm.bregion configure -text [exec spiketime_to_region $pos_file $spiketime]
+    } else {
+	.tlm.bregion configure -text ""
+    }
+}
+
+proc cursor {cwin cx} {
+    global binstart binend
+    set cx [expr $cx - [winfo rootx .ttl]]
+    place configure .ttl.fc -x $cx
+    .ttl.lp configure -text [format "%.5f" [expr ($binstart + $cx.0 / [winfo width .ttl.ff] * ($binend - $binstart))/1000]]
+}
+
+proc pick {cwin cx} {
+    global pick_x binstart binend
+    set cx [expr $cx - [winfo rootx .ttl]]
+    if {![regexp ".ttl.b" $cwin]} {
+	if {$pick_x == -1} {
+	    set pick_x $cx
+	    place .ttl.fc0 -in .ttl.ff -x $cx -y 0 -width 1 -relheight 1.0
+	} else {
+	    if {$pick_x < $cx} {
+		set x0 $pick_x
+		set x1 $cx
+	    } else {
+		set x0 $cx
+		set x1 $pick_x
+	    }		
+	    set binstart0 $binstart
+	    set width [winfo width .ttl.ff].0
+	    set binstart [expr $binstart + $x0.0 / $width * ($binend - $binstart)]
+	    set binend [expr $binstart0 + $x1.0 / $width * ($binend - $binstart0)]
+	    update_hist 1
+	    update_t_hist
+	    set pick_x -1
+	    place forget .ttl.fc0
+	}
+    }
+}
+
+proc right_pick {cwin cx} {
+    global pick_x binstart binend last_time
+    set cx [expr $cx - [winfo rootx .ttl]]
+    if {![regexp ".ttl.b" $cwin]} {
+	if {$pick_x == -1} {
+	    set pick_x $cx
+	    place .ttl.fc0 -in .ttl -x $cx -y 0 -width 1 -relheight 1.0
+	} else {
+	    if {$pick_x < $cx} {
+		set x0 $pick_x
+		set x1 $cx
+	    } else {
+		set x0 $cx
+		set x1 $pick_x
+	    }		
+	    set width [winfo width .ttl.ff].0
+	    set dx [expr $width / ($x1 - $x0) * ($binend - $binstart)]
+	    set binstart [expr $binstart - $x0.0 / $width * $dx]
+	    if {$binstart < 0} {
+		set binstart 0;
+	    }
+	    set binend [expr $binstart + $dx]
+	    if {$binend > $last_time} {
+		set binend $last_time
+	    }
+	    update_hist 1
+	    update_t_hist
+	    set pick_x -1
+	    place forget .ttl.fc0
+	}
+    }
+}
+
+proc full {} {
+    global binstart binend last_time
+    set binstart 0
+    set binend $last_time
+    update_hist 1
+    update_t_hist
+}
+
+proc write_bounds {} {
+    global txavar txavar0
+    set bounds [open bounds w]
+    puts $bounds "$txavar0 $txavar"
+    close $bounds
+}
+
+proc tline {} {
+    global plotcnt showcnt tmaxbin txavar txavar0 showstart units
+    if {[winfo exists .ttl]} {
+	return
+    }
+    toplevel .ttl
+    wm geometry .ttl 1265x946
+    wm title .ttl TIMELINE
+    button .ttl.bc -text "CANCEL" -command {destroy .ttl}
+    button .ttl.bf -text "FULL" -command full
+    button .ttl.bh -text "HIST" -command {update_hist 1}
+    button .ttl.bb -text "BOUNDS" -command write_bounds
+    label .ttl.lp -text ""
+    frame .ttl.ff
+    for {set sn 0} {$sn < $showcnt} {incr sn} {
+	set n [expr $showstart + $sn]
+	set unit [lindex $units $n]
+	frame .ttl.fsq$n
+	label .ttl.lcl$n -text "cluster $unit"
+	frame .ttl.fy$n -bg white
+	label .ttl.yaxis$n -bg white -bd 0 -textvariable tmaxbin($n)
+	square .ttl.sq$n -relief flat -bg white -bd 5 -color [get_color [expr $unit - 1]]
+	set tmaxbin($n) ""
+	pack .ttl.lcl$n -in .ttl.fsq$n
+	pack .ttl.fy$n -side top -in .ttl.fsq$n -fill x
+	pack .ttl.yaxis$n -in .ttl.fy$n -side left
+	pack .ttl.sq$n -in .ttl.fsq$n -side top -expand 1 -fill both
+	pack .ttl.fsq$n -expand 1 -fill both -in .ttl.ff
+    }
+    frame .ttl.fx -bg white
+    label .ttl.xaxisl -bg white -bd 0 -textvariable txavar0
+    label .ttl.xaxis -bg white -bd 0 -textvariable txavar
+    set txavar0 ""
+    set txavar ""
+    pack .ttl.xaxisl -in .ttl.fx -side left
+
+    pack .ttl.xaxis -in .ttl.fx -side right
+
+    pack .ttl.ff -fill both -expand 1
+    pack .ttl.fx -fill x
+    pack .ttl.bc .ttl.bf .ttl.lp -side left -anchor e
+    frame .ttl.fc -bg black
+    place .ttl.fc -in .ttl.ff -x 600 -y 0 -width 1 -relheight 1.0
+    bind .ttl <Motion> {cursor %W %X}
+    bind .ttl <1> {pick %W %X}
+    bind .ttl <3> {right_pick %W %X}
+    update_t_hist
+    frame .ttl.fc0 -bg black
+}
+
+proc shift {val} {
+    set_shiftpxl $val
+
+    global units waves
+    set unit_count [llength $units]
+    for {set n 0} {$n < $unit_count} {incr n} {
+	set unit [lindex $units $n]
+        global cb$n
+        if {[set cb$n]} {
+            .sqw$n configure -color [get_color [expr $unit - 1]]
+            .sqw$n configure -data $waves($n)
+        }
+    }
+    set_shiftpxl 0
+    global pos
+    write_shift $pos
+}
+
+proc new_ymag {val} {
+    global ymag
+    if {$val == 0} {
+	set ymag 1
+    } elseif {$ymag + $val >= 1} {
+	set ymag [expr $ymag + $val];
+    }
+    ymag $ymag
+    if {[winfo exists .tlm.sqm]} {
+#	set stopgo GO
+	.tlm.sqm configure -yscale $ymag
+    }
+    reconfigure_waves
+}
+
+proc do_recolor {} {
+    global ymag spla splb
+    recolor
+    update_t_hist
+    if {[winfo exists .tlm.sqm]} {
+	.tlm.sqm configure -yscale $ymag
+    }
+    reconfigure_waves
+    if {[winfo exists .tsplot]} {
+        event generate .tsplot.sqspl <Configure>
+        .tsplot.lda configure -fg [get_color [expr $spla - 1]]
+        if {$splb > 0} {
+            .tsplot.ldb configure -fg [get_color [expr $splb - 1]]
+        }
+    }
+}
+
+proc movie {} {
+    global pos mwaves spikenum spiketime wdt moviedir show_whitened movie_count SNAPLEN SF mtime stopgo
+    if {[winfo exists .tlm]} {
+	return
+    }
+    set movie_count 100
+    set mwaves [get_mwaves $pos 1000 $mwaves $wdt]
+    toplevel .tlm -height 600 -width 800
+    wm title .tlm MOVIE
+    bind .tlm <Key-Up> {if {$movie_count < 1000} {incr movie_count}}
+    bind .tlm <Key-Down> {if {$movie_count > 1} {incr movie_count -1}}
+    bind .tlm <Key-Left> {set movie_count 1}
+    bind .tlm <Key-Right> {set movie_count 1000}
+    bind .tlm <Key-Home> {set movie_count 100}
+    bind .tlm <Key-plus>  {new_ymag 1}
+    bind .tlm <Key-equal>  {new_ymag 1}
+    bind .tlm <Key-minus> {new_ymag -1}
+    bind .tlm <Key-0> {new_ymag 0}
+    square .tlm.sqm -type 3 -relief flat -bg white
+    .tlm.sqm configure -data $mwaves
+    button .tlm.bgo -textvariable stopgo -command stop_go -width 4
+    set stopgo GO
+    button .tlm.bstep -text STEP -command step -width 4
+    set moviedir 1
+    button .tlm.bfwd -text FWD -command fwd_rev -width 4
+    set show_whitened 0
+    button .tlm.braw -text RAW -command white_raw -width 4
+    button .tlm.bc -text "CANCEL" -command {destroy .tlm}
+    set spikenum 0
+    set spiketime 0
+    label .tlm.lsp -text spike
+    label .tlm.lnum -textvariable spikenum -width 6
+    entry .tlm.ltime -textvariable spiketime -width 13 -justify right
+#    label .tlm.lval -textvariable spikeval -width 6 -justify right
+    bind .tlm.ltime <Return> newtime
+    bind .tlm.ltime <FocusIn> {.tlm.ltime selection range 0 end}
+#    bind .tlm.ltime <Control-c> {clipboard clear; clipboard append $spiketime; puts [selection get]}
+
+    label .tlm.ls -text s
+    label .tlm.ledt -width 9
+    button .tlm.bregion -text "" -command get_region
+    button .tlm.bmm -text -- -command {set spiketime [expr $spiketime - $SNAPLEN/$SF]; newtime} -repeatdelay 500 -repeatinterval 100
+    button .tlm.bminus -text - -command {set spiketime [expr $spiketime - 1/$SF]; newtime} -repeatdelay 500 -repeatinterval 100
+    button .tlm.bplus -text + -command {set spiketime [expr $spiketime + 1/$SF]; newtime} -repeatdelay 500 -repeatinterval 100
+    button .tlm.bpp -text ++ -command {set spiketime [expr $spiketime + $SNAPLEN/$SF]; newtime} -repeatdelay 500 -repeatinterval 100
+
+    label .tlm.lcnt -textvariable movie_count
+    pack .tlm.sqm -expand 1 -fill both
+    pack .tlm.bgo .tlm.bstep .tlm.bfwd .tlm.braw .tlm.bc .tlm.lsp .tlm.lnum .tlm.ltime .tlm.ls .tlm.bmm .tlm.bminus .tlm.bplus .tlm.bpp .tlm.lcnt .tlm.ledt .tlm.bregion -side left -anchor e
+    wm geometry .tlm 900x600
+    move_tl .tlm
+}
+
+proc channels {msg} {
+    global val
+    toplevel .tch
+    move_tl .tch
+    label .tch.l -text $msg
+    entry .tch.e -width 57
+    button .tch.bok -text OK -command {set val [.tch.e get]; destroy .tch}
+    button .tch.bcn -text CANCEL -command {set val -1; destroy .tch}
+    pack .tch.l .tch.e -pady 5
+    pack .tch.bok .tch.bcn -side left -pady 5 -expand 1
+    tkwait window .tch
+    return $val
+}
+
+proc edt {} {
+    global units edtmap
+    toplevel .tedt
+    set unit_count [llength $units]
+    frame .tedt.f
+    pack .tedt.f -expand 1 -fill x
+    label .tedt.ll -text CLUSTER -width 9
+    label .tedt.lr -text "ID CODE"
+    pack .tedt.ll -in .tedt.f -side left
+    pack .tedt.lr -in .tedt.f -side right -expand 1
+    for {set n 0} {$n < $unit_count} {incr n} {
+	set cluster [lindex $units $n]
+	frame .tedt.f$n
+	pack .tedt.f$n -expand 1 -fill x
+	label .tedt.l$n -text $cluster -width 9
+	pack .tedt.l$n -in .tedt.f$n -side left -expand 1
+	entry .tedt.e$n -bg white -textvariable edtmap($cluster)
+	set edtmap($cluster) $cluster
+	pack .tedt.e$n -in .tedt.f$n -side right -expand 1
+    }
+    button .tedt.bw -text "WRITE EDT" -command {
+	set count [lindex $units end]
+	if {$count == ""} {set count 0}
+	eval write_edt "$pos {$pos_file} $count [array get edtmap]"
+	destroy .tedt;
+    }
+    pack .tedt.bw -pady 10 -side left -expand 1
+    button .tedt.bc -text "CANCEL" -command {destroy .tedt}
+    pack .tedt.bc -pady 10 -side left -expand 1
+    move_tl .tedt
+}
+
+proc get_region {} {
+    global do_region pos_file spiketime
+
+    if {$do_region == 0} {
+	set do_region 1
+	.tlm.bregion configure -text [exec spiketime_to_region $pos_file $spiketime]
+    } else {
+	set do_region 0
+	.tlm.bregion configure -text ""
+    }
+}
+
+label .lfile
+frame .fsq
+scrollbar .sb -orient horizontal -command scroll
+scale .sbinsize -from .01 -to 5 -orient horizontal -resolution .01 \
+	-label "bin size in milliseconds:" -relief raised  -command set_binsize -variable binsize
+set types {{"pos files"		{.pos}	}}
+
+frame .fb
+button .bsp -text SPLIT -command split_dmx_or_abf
+button .bss -text SPIKESORT -command spikesort
+button .bopen -text RESULTS -command {
+    results [tk_getOpenFile -filetypes $types -initialfile $pos_file -initialdir $last_resdir]
+}
+#button .bdefault -text DFLT -command {results {/cygdrive/d/New Data Entry/cygwin/lauk0501.chan}}
+#button .bdefault -text DFLT -command {results "$startdir/sample.chan"}
+
+frame .fb2
+button .bin -text IN -command in -state disabled
+button .bout -text OUT -command out -state disabled
+button .bquit -text QUIT -command exit
+button .bedt -text EDT -command edt
+button .bmovie -text MOVIE -command movie
+button .btline -text TLINE -command tline
+button .bmerge -text MERGE -command do_merge -state disabled
+button .bdel -text DELETE -command do_delete -state disabled
+button .bdoub -text DOUBLET -command do_doublet
+button .bundo -text UNDO -command undo
+button .bredo -text REDO -command redo
+button .brecolor -text RECOLOR -command do_recolor
+
+pack .lfile -side top -fill x -padx 5 -pady 5
+frame .fsel
+label .lcmv -textvariable current_merge_version
+label .lsel -textvariable selected
+label .lmag -textvariable ymag
+#pack .fsel -side top -padx 5 -pady 5
+pack .fsel -side top -fill x
+pack .lcmv -in .fsel -side left
+pack .lmag -in .fsel -side left -expand 1
+pack .lsel -in .fsel -side right
+pack .fsq -side top -expand 1 -fill both
+pack .sbinsize -fill x
+
+pack .fb
+#pack .bss .bopen .bdefault -in .fb  -side left -expand 1 -fill x
+pack .bsp .bss .bopen .bdoub .bundo .bredo .brecolor -in .fb  -side left -expand 1 -fill x
+
+pack .fb2
+pack .bin .bout .bmovie .btline .bmerge .bdel .bedt .bquit -in .fb2 -side left
+
+bind . <Key-plus>  {new_ymag 1}
+bind . <Key-equal>  {new_ymag 1}
+bind . <Key-minus> {new_ymag -1}
+bind . <Key-0> {new_ymag 0}
+
+#results "/cygdrive/d/New Data Entry/cygwin/test_data_5/d43m136.pos"
+#tline
+
+wm geometry . 690x680
+
+if {$argc > 0} {
+    results [lindex $argv 0]
+}
+
+proc undo {} {
+    global pos pos_file current_merge_version latest_merge_backup
+    global showstart showcnt
+    set old_showstart $showstart 
+    set old_showcnt $showcnt
+    if {$current_merge_version == 0} {
+	return
+    } elseif {$current_merge_version == ""} {
+	set current_merge_version $latest_merge_backup
+    } else {
+	incr current_merge_version -1
+    }
+    merge_version $pos $current_merge_version
+    results $pos_file
+    reset_pos $old_showstart $old_showcnt
+}
+
+proc redo {} {
+    global pos pos_file current_merge_version latest_merge_backup
+    global showstart showcnt
+    set old_showstart $showstart 
+    set old_showcnt $showcnt
+    if {$current_merge_version == "" || $current_merge_version == $latest_merge_backup} {
+	return
+    } else {
+	incr current_merge_version
+    }
+    merge_version $pos $current_merge_version
+    results $pos_file
+    reset_pos $old_showstart $old_showcnt
+}
+
+proc reset_pos {old_showstart old_showcnt} {
+    global showstart showcnt units
+
+    set unit_count  [llength $units]
+    while {$showcnt < $old_showcnt && $showcnt < $unit_count} out
+    if {$old_showcnt > 0} {while {$showcnt > $old_showcnt} in}
+    if {$showstart < $old_showstart} { scroll scroll [expr $old_showstart - $showstart] units }
+}
+
+proc do_merge {} {
+    global selected pos pos_file units showstart showcnt
+
+    set old_showstart $showstart 
+    set old_showcnt $showcnt
+   
+    if {$pos == 0} return
+    if {[llength $selected] == 1} {set first $selected}
+    foreach id [eval get_members [lindex $selected 0]] {
+	set reselect$id 1
+    }
+    eval merge $pos $selected
+    results $pos_file
+    if {[info exists first]} {
+	set n [lsearch -exact $units $first]
+	global cb$n
+	set cb$n 1
+	select $n no_splot
+	unset reselect$first
+    }
+    set n 0
+    foreach id $units {
+	if {[info exists reselect$id]} {
+	    global cb$n
+	    set cb$n 1
+	    select $n no_splot
+	    set select_called 1
+	}
+	incr n
+    }
+    if {![info exists select_called]} {set_merge_delete}
+    reset_pos $old_showstart $old_showcnt
+}
+
+proc do_delete {} {
+    global selected pos pos_file units selectcount
+
+    global showstart showcnt
+    set old_showstart $showstart 
+    set old_showcnt $showcnt
+    
+    if {[winfo exists .ttl]} {
+	destroy .ttl
+    }
+    if {$pos == 0} return
+    set old_selectcount $selectcount
+    foreach id $units {set noselect$id 1}
+    eval delete $pos $selected
+    results $pos_file
+    set n 0
+    foreach id $units {
+	if {![info exists noselect$id]} {
+	    global cb$n
+	    set cb$n 1
+	    select $n no_splot
+	    set select_called 1
+	}
+	incr n
+    }
+    if {![info exists select_called]} {set_merge_delete}
+    reset_pos $old_showstart $old_showcnt
+}
+
+proc do_doublet {} {
+    global pos selected doublet_pid
+
+    if {$pos != 0 && $selected != ""} {
+	set cmd [get_doublet $pos $selected]
+	puts "get_doublet $pos $selected: $cmd"
+	if {$cmd != ""} {
+	    catch {exec killall waveform.tcl}
+	    set doublet_pid [eval exec $cmd &]
+	}
+    }
+}

@@ -1,0 +1,1493 @@
+#!/usr/bin/tclsh
+
+package require Expect
+package require Tk
+
+wm title . "Spikesort Control Panel v@PACKAGE_VERSION@"
+
+set test 0
+if [regexp "spikesort_control_panel_test" $argv0] { set test 1 }
+
+set prompt {\$(\e\[00m | \e\[00m| )(\e\[K)?$}
+set msg_host ""
+
+proc alert {text} {
+    set w .msg
+    catch {destroy $w}
+    toplevel $w -class Dialog
+    wm title $w "Please note"
+    wm iconname $w Dialog
+    wm protocol $w WM_DELETE_WINDOW { }
+
+    if {[winfo viewable [winfo toplevel [winfo parent $w]]] } {
+	wm transient $w [winfo toplevel [winfo parent $w]]
+    }    
+
+    frame $w.bot
+    frame $w.top
+    pack $w.bot -side bottom -fill both
+    pack $w.top -side top -fill both -expand 1
+
+    label $w.msg -justify left -text $text -font "times 12"
+    pack $w.msg -in $w.top -side right -expand 1 -fill both -padx 3m -pady 3m
+
+    button $w.button -text OK -command {set done 1}
+    grid $w.button -in $w.bot -column 0 -row 0 -sticky ew -padx 10 -pady 4
+    grid columnconfigure $w.bot 0
+
+    bind $w <Return> {set done 1}
+
+    wm withdraw $w
+    update idletasks
+    set x [expr {[winfo screenwidth $w]/2 - [winfo reqwidth $w]/2 \
+	    - [winfo vrootx [winfo parent $w]]}]
+    set y [expr {[winfo screenheight $w]/2 - [winfo reqheight $w]/2 \
+	    - [winfo vrooty [winfo parent $w]]}]
+    wm geom $w +$x+$y
+    wm deiconify $w
+
+    set oldFocus [focus]
+    set oldGrab [grab current $w]
+    if {[string compare $oldGrab ""]} {
+	set grabStatus [grab status $oldGrab]
+    }
+    grab $w
+    focus $w
+
+    vwait done
+    catch {focus $oldFocus}
+    catch {
+	bind $w <Destroy> {}
+	destroy $w
+    }
+    if {[string compare $oldGrab ""]} {
+	if {[string compare $grabStatus "global"]} {
+	    grab $oldGrab
+	} else {
+	    grab -global $oldGrab
+	}
+    }
+}
+
+tk scaling 1.58
+
+set hlist /etc/spikesorter/host_list
+if {$argc > 1} {
+    set hlist [lindex $argv 1]
+}
+
+if {$argc > 0} {
+    set hdrpath [lindex $argv 0]
+} elseif {[string compare [exec hostname] delwin] == 0} {
+    set hdrpath /home/roconnor/cw/spikesorter/dmx_split_dir/march7_truncated.hdr
+} else {
+    alert "usage: [file tail $argv0] /absolute/path/to/xxx.hdr"
+    exit 1
+}
+set hdrdir [file dirname $hdrpath]
+
+if {[catch {
+    set f [open $hlist]
+    while {[gets $f line] >= 0} {
+	if {[llength $line] != 3 && [llength $line] != 4} {
+	    alert "$hlist format error"
+	    exit 1;
+	}
+	set host [lindex $line 0]
+	set arg1 [lindex $line 1]
+	set arg2 [lindex $line 2]
+	set arg3 [lindex $line 3]
+	set transfer_type($host) $arg1
+	set datapath($host) $arg2
+	if {$arg3 != "*"} {
+	    lappend host_list $host
+	}
+    }
+} msg]} { alert $msg; exit 1}
+
+set myhost [exec hostname]_0
+
+if {[catch {
+    set mypath $datapath($myhost)
+} msg]} { alert "this host ($myhost) not in $hlist"; exit 1}
+
+if {![string match "$mypath*" $hdrpath]} {
+    alert "fatal error: $hdrpath must be under $mypath, and it is not"
+    exit 1
+}
+set start [expr [string length $mypath] + 1]
+if {$mypath == "/"} {incr start -1}
+set hdrfile [string range $hdrpath $start end]
+set midpath [file dirname $hdrfile]
+#set prefix [file rootname [file tail $hdrfile]]
+regsub -all {\.} [file tail $hdrfile] _ prefix
+set prefix_ ${prefix}_
+
+wm title . "Spikesort Control Panel v@PACKAGE_VERSION@ -- $prefix"
+
+proc spikesort {host chanidx} {
+    global prefix_ transfer_type datapath midpath spawn_id index_to_idch index_to_ida index_to_idb busy results_host
+    global test
+    if {$busy($chanidx)} { return }
+    set chan [format "%02d" [expr $chanidx + 1]]
+    set f $prefix_$chan.chan
+    set edt $prefix_$chan.edt
+    set a [.c itemcget $index_to_ida($chanidx) -text]
+    set b [.c itemcget $index_to_idb($chanidx) -text]
+    set code [.c itemcget $index_to_idch($chanidx) -text]
+    set p $datapath($host)/$midpath/$f
+
+    if       {$transfer_type($host) == "fs"  } { set cmd "ln -sf $p $f"
+    } elseif {$transfer_type($host) == "sftp"} { set cmd "sftp $p"    
+    } else {alert "unknown transfer type for $host: $transfer_type($host)"; exit 1}
+
+    if       {$a == "S"} { append cmd "; spikesort $f"
+    } elseif {$a == "D"} { append cmd "; digitize  $f $code"
+    } elseif {$a == "I"} { append cmd "; integrate $f $code" }
+
+    if       {$b == "C"} { append cmd "; cpls     $edt $code"
+    } elseif {$b == "T"} { append cmd "; trachpls $edt $code"
+    } elseif {$b == "R"} { append cmd "; rpls     $edt $code; muph -m $f" }
+
+    set busy($chanidx) 1
+    set results_host($chanidx) $host
+    if {$test} { set cmd "ln -sf $p $f; fake_spikesort $f" }
+    exp_send "echo $chanidx $prefix_$chan.status > job_number_$host; $cmd\r"
+}
+
+set lblfile $datapath($myhost)/$midpath/$prefix.lbl
+if {[file exists $lblfile]} {
+    set lbls [split [exec cat $lblfile] "\n"]
+    set enabled [list]
+    for {set n 0} {$n < [llength $lbls]} {incr n} {
+        lappend enabled 1
+    }
+} else {
+    set lbls [split [exec /usr/local/bin/dmx $hdrpath labels] "\n"]
+    set enabled [exec /usr/local/bin/dmx $hdrpath enabled]
+}
+
+set channel_count [llength $lbls]
+
+set host_count [llength $host_list]
+
+array set types {Pegasus spike Adj spike Gemini spike Medusa spike
+    N1 phrenic N2 nerve2 N3 nerve3 N4 nerve4 N5 nerve5
+    Blood bp CO2 co2 Tracheal trach Stimulus stim Channel none Timing none Microstim stim
+    Et co2 EP trach PS_R phrenic TA_R nerve10 PS_L nerve11 TA_L
+    nerve12 Add nerve13 PCA nerve14 UES nerve15 GeHy nerve16 ThPh
+    nerve17 StTh_R nerve18 StTh_L nerve19
+    }
+
+array set SL {spike S        none "-"  phrenic I nerve2 I nerve3 I nerve4 I nerve5 I bp D co2 D trach D stim D nerve10 I  nerve11 I  nerve12 I  nerve13 I  nerve14 I  nerve15 I  nerve16 I  nerve17 I  nerve18 I  nerve19 I }
+array set RI {spike "-"      none "-"  phrenic R nerve2 - nerve3 - nerve4 - nerve5 - bp C co2 - trach T stim - nerve10 -  nerve11 -  nerve12 -  nerve13 -  nerve14 -  nerve15 -  nerve16 -  nerve17 -  nerve18 -  nerve19 - }
+array set ch {spike 001-996  none ""   phrenic 1 nerve2 2 nerve3 3 nerve4 4 nerve5 5 bp 6 co2 7 trach 8 stim 9 nerve10 10 nerve11 11 nerve12 12 nerve13 13 nerve14 14 nerve15 15 nerve16 16 nerve17 17 nerve18 18 nerve19 19 }
+
+canvas .c -width 16.5i -height 8i -cursor left_ptr
+set bg [.c cget -bg]
+
+for {set n 0} {$n < $channel_count} {incr n} {
+    global index_to_id index_to_idl id_to_index idr_to_idch index_to_type e_array array_size array_electrode
+    set y [expr $n % 44 * .18 + .25]
+    set lbl [lindex $lbls $n]
+    set array_size() 1
+    if {[regexp {(\S+)[- ]+(\d+)$} $lbl all a e]} {
+	set e_array($n) $a
+	set array_electrode($n) $e
+	if {![info exists array_size($a)] || $e > $array_size($a)} {
+	    set array_size($a) $e
+	}
+    } else {
+	set e_array($n) ""
+	set array_electrode($n) 1
+    }
+	
+    set type none
+    catch {set type $types([regexp -inline -- {^[a-zA-Z0-9_]*} $lbl])}
+
+    set index_to_type($n) $type
+    if {[lindex $enabled $n]} {
+	set fill "black"
+    } else {
+	set fill "gray"
+	set type none
+    }
+
+    set x [expr $n / 44 * 5.5 + .1]
+    set id [.c create text  ${x}i ${y}i -text $SL($type) -anchor sw -font "times 12" -tags flaga]
+    set index_to_ida($n) $id
+    set id_to_index($id) $n
+
+    set x [expr $x + .2]
+    set id [.c create text  ${x}i ${y}i -text $RI($type) -anchor sw -font "times 12" -tags flagb]
+    set index_to_idb($n) $id
+    set id_to_index($id) $n
+
+    set x [expr $x + .5]
+    set id [.c create text ${x}i ${y}i -anchor se -text [format "%2d  " [expr $n + 1]] -font "times 12" -fill $fill -tags item]
+    set index_to_id($n) $id
+    set id_to_index($id) $n
+
+    set x [expr $x + .0]
+    set x2 [expr $x + 1]
+    set y2 [expr $y - .17]
+    set idr [.c create rectangle ${x}i ${y}i ${x2}i ${y2}i -tags chrct -fill $bg -outline ""]
+    set id [.c create text ${x}i ${y}i -anchor sw -text $lbl -font "times 12" -fill $fill -tags "label edit"]
+    set index_to_idl($n) $id
+    set id_to_index($id) $n
+    set id_to_index($idr) $n
+    set idr_to_idch($idr) $id
+
+    set x [expr $x + 1.3]
+    set x2 [expr $x + 1]
+    set y2 [expr $y - .17]
+    set idr [.c create rectangle ${x}i ${y}i ${x2}i ${y2}i -tags chrct -fill $bg -outline ""]
+    set id [.c create text ${x}i ${y}i -anchor sw -text $ch($type) -font "times 12" -fill $fill -tags "chnum edit"]
+    set index_to_idch($n) $id
+    set id_to_index($id) $n
+    set id_to_index($idr) $n
+    set idr_to_idch($idr) $id
+
+    set x [expr $x + 1]
+    if {$type == "none"} {
+	set txt ""
+    } else {
+	set txt "not started"
+    }
+    set id [.c create text ${x}i ${y}i -anchor sw -text $txt -font "times 12" -fill $fill]
+    set index_to_idst($n) $id
+    set id_to_index($id) $n
+
+}
+
+set numfile $datapath($myhost)/$midpath/$prefix.num
+if {[file exists $numfile]} {
+    set nums [split [exec cat $numfile] "\n"]
+    for {set n 0} {$n < $channel_count} {incr n} {
+	.c itemconfig $index_to_idch($n) -text [lindex $nums $n]
+    }
+}
+
+set wrkfile $datapath($myhost)/$midpath/$prefix.wrk
+if {[file exists $wrkfile]} {
+    set wrks [split [exec cat $wrkfile] "\n"]
+    for {set n 0} {$n < $channel_count} {incr n} {
+	.c itemconfig $index_to_ida($n) -text [string index [lindex $wrks $n] 0]
+	.c itemconfig $index_to_idb($n) -text [string index [lindex $wrks $n] 1]
+    }
+}
+
+button .bgo    -command go            -text DISPATCH   -state disabled
+button .bexit  -command exit_button   -text EXIT       -state disabled
+button .bres   -command results       -text RESULTS    -state disabled
+button .bupd   -command update_status -text UPDATE     -state disabled
+button .bwave  -command waveform      -text "RAW DATA" -state disabled
+button .bdia   -command diagram       -text DIAGRAM    -state disabled
+button .bnotes -command notes         -text NOTES      -state disabled
+button .bmerge -command merge         -text MERGE      -state disabled
+button .bstop  -command stop          -text "STOP\nDISPATCH" -state disabled
+
+pack .c 
+pack .bgo .bres .bupd .bwave .bdia .bnotes .bmerge .bstop .bexit -side left -expand 1
+
+#.c bind item <Any-Enter> "itemEnter .c"
+#.c bind item <Any-Leave> "itemLeave .c"
+.c bind item <Shift-1> shift_sel
+.c bind item <Control-1> control_sel
+.c bind item <1> chsel
+.c bind flaga <1> flipa
+.c bind flagb <1> flipb
+.c bind item <B1-Motion> "newaddsel %x %y"
+
+.c bind edit  <1> "textB1Press .c %x %y"
+.c bind chrct <1> "rectB1Press .c %x %y"
+.c bind edit  <B1-Motion> "textB1Move .c %x %y"
+.c bind edit  <Shift-1> ".c select adjust current @%x,%y"
+.c bind edit  <Shift-B1-Motion> "textB1Move .c %x %y"
+.c bind edit  <KeyPress> "textInsert .c %A %K"
+.c bind edit  <Control-n> doNext
+.c bind edit  <Return> textReturn
+.c bind edit  <Control-h> "textBs .c"
+.c bind edit  <BackSpace> "textBs .c"
+.c bind edit  <Delete> "textDel .c"
+.c bind edit  <2> "textPaste .c @%x,%y" 
+.c bind chrct <2> "rectPaste .c @%x,%y" 
+.c bind edit  <3> "textRclick %x %y"
+.c bind chrct <3> "rectRclick %x %y"
+
+proc save_nums {} {
+    global numfile index_to_idch channel_count
+    file delete $numfile
+    set num [open $numfile w]
+    for {set n 0} {$n < $channel_count} {incr n} {
+	puts $num [lindex [.c itemconfig $index_to_idch($n) -text] end]
+    }
+    close $num
+}
+
+proc textReturn {} {
+    global id_to_index index_to_idch index_to_idl channel_count lblfile
+    set eid [.c focus]
+    set txt [lindex [.c itemconfig $eid -text] end]
+    .c focus {}
+    .c select clear
+    if {[lsearch [.c gettags $eid] label] != -1} {
+	foreach item [.c find withtag selected] {
+	    set index $id_to_index($item)
+	    .c itemconfig $index_to_idl($index) -text $txt
+	}
+	file delete $lblfile
+	set lbl [open $lblfile w]
+	for {set n 0} {$n < $channel_count} {incr n} {
+	    puts $lbl [lindex [.c itemconfig $index_to_idl($n) -text] end]
+	}
+	close $lbl
+    } else {
+	foreach item [.c find withtag selected] {
+	    set index $id_to_index($item)
+	    .c itemconfig $index_to_idch($index) -text $txt
+	}
+	save_nums
+    }
+}
+
+proc textInsert {w string keysym} {
+#    puts $keysym
+    if {$string == ""} {
+	return
+    }
+    catch {$w dchars [.c focus] sel.first sel.last}
+    $w insert [.c focus] insert $string
+}
+
+proc Paste {w pos id} {
+    catch {
+	$w insert $id $pos [selection get]
+    }
+}
+
+proc textPaste {w pos} {
+    set id [.c find withtag current]
+    Paste $w $pos $id
+}
+
+proc rectPaste {w pos} {
+    global idr_to_idch
+    set id $idr_to_idch([.c find withtag current])
+    Paste $w $pos $id
+}
+
+proc doNext {} {
+    global id_to_index channel_count index_to_idl
+    puts doNext
+    set id [.c focus]
+    if {[lsearch [.c gettags $id] label] == -1} return
+    set sel [.c find withtag selected]
+    .c itemconfig selected -fill black
+    .c dtag selected
+    set index $id_to_index($id)
+    incr index
+    if {$index >= $channel_count} {
+	set index 0
+    }
+    set id $index_to_idl($index)
+    .c icursor $id end
+    .c focus $id
+    .c select to $id end
+    .c select clear
+    .c select from $id end
+}
+
+proc B1Press {w x y id} {
+    $w icursor $id @$x,$y
+    $w focus $id
+    focus $w
+    $w select to $id @$x,$y
+    $w select clear
+    $w select from $id @$x,$y
+}
+
+proc textB1Press {w x y} {
+    set id [.c find withtag current]
+    B1Press $w $x $y $id
+}
+
+proc rectB1Press {w x y} {
+    global idr_to_idch
+    set id $idr_to_idch([.c find withtag current])
+    B1Press $w $x $y $id
+}
+
+proc textRclick {x y} {
+    textB1Press .c $x $y
+    tk_popup .region $x $y
+}
+
+proc rextRclick {x y} {
+    rectB1Press .c $x $y
+    tk_popup .region $x $y
+}
+
+proc textB1Move {w x y} {
+    $w select to current @$x,$y
+}
+
+proc textBs {w} {
+    if {![catch {$w dchars [.c focus] sel.first sel.last}]} {
+	return
+    }
+    set char [expr {[$w index [.c focus] insert] - 1}]
+    if {$char >= 0} {$w dchar [.c focus] $char}
+}
+
+proc textDel {w} {
+    if {![catch {$w dchars [.c focus] sel.first sel.last}]} {
+	return
+    }
+    $w dchars [.c focus] insert
+}
+
+proc save_wrk {} {
+    global wrkfile channel_count index_to_ida index_to_idb
+    file delete $wrkfile
+    set wrk [open $wrkfile w]
+    for {set n 0} {$n < $channel_count} {incr n} {
+	puts -nonewline $wrk [lindex [.c itemconfig $index_to_ida($n) -text] end]
+	puts            $wrk [lindex [.c itemconfig $index_to_idb($n) -text] end]
+    }
+    close $wrk
+    save_nums
+}
+
+proc flipa {} {
+    global enabled id_to_index index_to_ida index_to_idb index_to_id busy
+    set index $id_to_index([.c find withtag current])
+    if {$busy($index)} return
+
+    set id $index_to_id($index)
+    set sel [.c find withtag selected]
+    if {$sel != "" && [lsearch $sel $id] == -1} {
+	return
+    }
+
+    if {[lindex $enabled $index] == 0} {
+	return
+    }
+    set b_id $index_to_idb($index)
+    set txt [lindex [.c itemconfig current -text] end]
+    .c itemconfig $b_id -text "-"
+    if {$txt == "S"} {
+	set newtxt I
+    } elseif {$txt == "I"} {
+	set newtxt "D"
+    } elseif {$txt == "D"} {
+	set newtxt "-"
+    } else {
+	set newtxt S
+    }
+    .c itemconfig current -text $newtxt
+    checkstat $index
+    foreach item [.c find withtag selected] {
+	set index $id_to_index($item)
+	.c itemconfig $index_to_ida($index) -text $newtxt
+	checkstat $index
+    }
+    save_wrk
+}
+
+proc flipb {} {
+    global enabled id_to_index index_to_idb index_to_ida index_to_id busy
+    set index $id_to_index([.c find withtag current])
+    if {$busy($index)} return
+    
+    set id $index_to_id($index)
+    set sel [.c find withtag selected]
+    if {$sel != "" && [lsearch $sel $id] == -1} {
+	return
+    }
+
+    if {[lindex $enabled $index] == 0} {
+	return
+    }
+    set a_id $index_to_ida($index)
+    set atxt [lindex [.c itemconfig $a_id -text] end]
+    set txt [lindex [.c itemconfig current -text] end]
+    if       {$atxt == "I"} {
+	if {$txt == "R"} {
+	    set newtxt "-"
+	} else {
+	    set newtxt R
+	}
+    } elseif {$atxt == "D"} {
+	if {$txt == "C"} {
+	    set newtxt "T"
+	} elseif {$txt == "T"} {
+	    set newtxt "-"
+	} else {
+	    set newtxt C
+	}
+    } else {
+	set newtxt "-"
+    }
+    .c itemconfig current -text $newtxt
+    checkstat $index
+    foreach item [.c find withtag selected] {
+	set index $id_to_index($item)
+	.c itemconfig $index_to_idb($index) -text $newtxt
+	checkstat $index
+    }
+    save_wrk
+}
+
+proc addsel {x y} {
+    global enabled id_to_index
+    set item [.c find closest $x $y]
+    if {[lindex $enabled $id_to_index($item)] == 0} {
+	return
+    }
+    .c itemconfig $item -fill red
+    .c addtag selected withtag $item
+}
+
+proc chsel {} {
+    global index_to_id id_to_index
+    global lastidx enabled
+
+    set sel [.c find withtag selected]
+    .c itemconfig selected -fill black
+    .c dtag selected
+    set lastidx $id_to_index([.c find withtag current])
+    if {$sel == $index_to_id($lastidx)} {
+	return
+    }
+    if {[lindex $enabled $lastidx] == 0} {
+	return
+    }
+    .c itemconfig current -fill red
+    .c addtag selected withtag current
+
+}
+
+proc control_sel {} {
+    global index_to_id id_to_index
+    global lastidx enabled
+
+    set lastidx $id_to_index([.c find withtag current])
+    if {[lindex $enabled $lastidx] == 0} {
+	return
+    }
+    set fill [lindex [.c itemconfig current -fill] end]
+    if {$fill == "red"} {
+	.c itemconfig current -fill black
+	.c dtag current selected
+    } else {
+	.c itemconfig current -fill red
+	.c addtag selected withtag current
+    }
+}
+
+proc shift_sel {} {
+    global lastidx id_to_index index_to_id enabled
+    .c itemconfig current -fill red
+    set thisidx $id_to_index([.c find withtag current])
+    if {$lastidx < $thisidx} {
+	set start $lastidx
+	set end $thisidx
+    } else {
+	set end $lastidx
+	set start $thisidx
+    }
+    for {set n $start} {$n <= $end} {incr n} {
+	if {[lindex $enabled $n] == 0} {
+	    continue
+	}
+	set id $index_to_id($n)
+	.c itemconfig $id -fill red
+	.c addtag selected withtag $id
+    }
+}
+
+proc newaddsel {x y} {
+    global lastidx id_to_index index_to_id enabled
+    .c itemconfig current -fill red
+    set thisidx $id_to_index([.c find closest $x $y])
+    if {$lastidx < $thisidx} {
+	set start $lastidx
+	set end $thisidx
+    } else {
+	set end $lastidx
+	set start $thisidx
+    }
+    for {set n $start} {$n <= $end} {incr n} {
+	if {[lindex $enabled $n] == 0} {
+	    continue
+	}
+	set id $index_to_id($n)
+	.c itemconfig $id -fill red
+	.c addtag selected withtag $id
+    }
+    set lastidx $thisidx
+}
+
+proc itemEnter {c} {
+    global oldfill
+    set oldfill [lindex [.c itemconfig current -fill] 4]
+    set type [.c type current]
+    if {$type == "text"} {
+        .c itemconfig current -fill SteelBlue2
+    }
+}
+
+proc itemLeave {c} {
+    global oldfill
+    .c itemconfig current -fill $oldfill
+}
+
+proc checkstat {n} {
+    global index_to_ida index_to_idb index_to_idc index_to_idst index_to_idch index_to_type ch
+    set a [.c itemcget $index_to_ida($n) -text]
+    set b [.c itemcget $index_to_idb($n) -text]
+    if {$b == "R" && $a != "I" || $b == "C" && $a != "D" || $b == "T" && $a != "D"} {
+	.c itemconfig $index_to_idb($n) -text "-"
+	set b -
+    }
+    if {$a == "-" && $b == "-"} {
+	.c itemconfig $index_to_idch($n) -text ""
+    } else {
+	if {$a != "-"} {
+	    .c itemconfig $index_to_idch($n) -text $ch($index_to_type($n))
+	} else {
+	    .c itemconfig $index_to_idch($n) -text ""
+	}
+    }
+    put_channel_status $n
+}
+
+menu .region -font "times 12"
+.region add command -label "rostral VRG" -command "setchan 101-199"
+.region add command -label "C1 & C2" -command "setchan 201-299"
+.region add command -label "caudal VRG" -command "setchan 301-399"
+.region add command -label "RTN" -command "setchan 401-499"
+.region add command -label "PONS (PRG)" -command "setchan 501-599"
+.region add command -label "Lat. Column (L)" -command "setchan 601-699"
+.region add command -label "NTS" -command "setchan 701-799"
+.region add command -label "CPA" -command "setchan 801-899"
+.region add command -label "Lat. Column (R)" -command "setchan 801-899"
+.region add command -label "Raphe" -command "setchan 901-996"
+
+proc setchan {txt} {
+    .c itemconfig [.c focus] -text $txt
+}
+
+proc dialogmsg {w msg h} {
+    catch {destroy $w}
+    toplevel $w -class Dialog
+    wm title $w STATUS
+    wm iconname $w Dialog
+    wm protocol $w WM_DELETE_WINDOW { }
+    wm transient $w [winfo toplevel [winfo parent $w]]
+
+    frame $w.top -relief raised -bd 1
+    pack $w.top -side top -fill both -expand 1
+
+    label $w.msg -justify left -font "times 12" -text $msg -width 120 -height $h -anchor w
+    pack $w.msg -in $w.top -side right -expand 1 -fill both -padx 3m -pady 3m
+
+    wm withdraw $w
+    update idletasks
+    set x [expr {[winfo screenwidth $w]/2 - [winfo reqwidth $w]/2  - [winfo vrootx [winfo parent $w]]}]
+    set y [expr {[winfo screenheight $w]/2 - [winfo reqheight $w]/2  - [winfo vrooty [winfo parent $w]]}]
+    set x [winfo x [winfo parent $w]]
+    set y [winfo y [winfo parent $w]]
+    wm geom $w +$x+$y
+    wm deiconify $w
+}
+
+proc flush {} {
+    expect *
+    puts "saw \"$expect_out(buffer)\""
+}
+
+proc get_channel_hosts {} {
+    global host_spawn prefix_ results_host connected prompt
+
+    foreach host $connected {
+	set spawn_id $host_spawn($host)
+	exp_send "echo starttag; ls -x --color=never $prefix_*.chan\r"
+#	puts "ls -x --color=never $prefix_??.chan sent to $host"
+        set pat "${prefix_}0*(\\d+).chan"
+        expect starttag {}
+        set chanlist [list]
+	expect {
+	    -re $pat {
+		set chanidx [expr $expect_out(1,string) - 1]
+                lappend chanlist $chanidx
+		exp_continue
+	    }
+            -re $prompt {}
+            -re {.+} {
+                exp_continue
+            }
+	}
+        regsub .*_ $host "" cpu
+        foreach chanidx $chanlist {
+            set chan [format "%02d" [expr $chanidx + 1]]
+            exp_send "requester $cpu status $chanidx $prefix_$chan.status\r"
+            set stat ""
+            expect -re {\r\n?requester: status (.*)\r\n?} {
+                set stat $expect_out(1,string)
+            } timeout {
+                puts "get_channel_hosts: requester $cpu status $chanidx $prefix_$chan.status timed out";
+                flush
+            }
+            expect -re $prompt
+            if {[info exists results_host($chanidx)]} {
+                regsub _.* $results_host($chanidx) "" rh
+            }
+            regsub _.* $host "" h
+            if {[regexp "running on" $stat]} {
+                if {[info exists results_host($chanidx)] && $h != $rh} {
+                    puts "results for channel [expr $chanidx + 1] exist on $rh and $h"
+                    puts "but it's running on $host, so using $host"
+                }
+                set results_host($chanidx) $host
+            } else {
+                if {[info exists results_host($chanidx)] && $host != $results_host($chanidx)} {
+                    if {$h != $rh} {
+                        puts "results for channel [expr $chanidx + 1] exist on $rh and $h,"
+                        puts "using  $results_host($chanidx)"
+                    }
+                } else {
+                    set results_host($chanidx) $host
+                }
+            }
+        }       
+    }
+}
+
+proc put_channel_status {chanidx} {
+    global index_to_ida index_to_idb chan_status results_host index_to_idst
+#    puts -nonewline pcs1; puts $chan_status($chanidx)
+
+    if [regexp "running on" $chan_status($chanidx)] {
+        .c itemconfig $index_to_idst($chanidx) -text $chan_status($chanidx) -fill black
+        return
+    }
+    set a [.c itemcget $index_to_ida($chanidx) -text]
+    set b [.c itemcget $index_to_idb($chanidx) -text]
+    if {$a == "-"} {set a ""}
+    if {$b == "-"} {set b ""}
+#    puts -nonewline pcs2; puts $chan_status($chanidx)
+    if {$chan_status($chanidx) != ""} {
+	set s "$chan_status($chanidx) done"
+    } elseif {$a != "" && ![info exists results_host($chanidx)]} {
+	set s "not started"
+    }
+    set fill black
+    if {![regexp $a.*$b $chan_status($chanidx)]} {
+	if {[info exists s]} {append s ", "}
+	if {![info exists s] || $s != "not started, "} {
+	    set fill red
+	}
+	append s "$a$b to do"
+    }
+    if {[info exists results_host($chanidx)]} {
+	if {[info exists s]} {append s " "}
+	append s "on $results_host($chanidx)"
+    }
+    if {![info exists s]} {set s ""}
+    if {[regexp "done on " $s]} {
+        regsub _.* $s "" s
+    }
+    .c itemconfig $index_to_idst($chanidx) -text $s -fill $fill
+}
+
+proc get_bounds {chanidx} {
+    global results_host spawn_id host_spawn prefix_
+
+    set bounds ""
+    if {[info exists results_host($chanidx)]} {
+	set host $results_host($chanidx)
+	set spawn_id $host_spawn($host)
+	exp_send "cat bounds 2> /dev/null; echo X\r"
+	expect -re {echo X[\r\n]+([^X]*)X[\r\n]+.*\$[^ ]* } {
+	    set bounds $expect_out(1,string)
+	}
+    }
+    return $bounds
+}
+
+proc get_channel_status {chanidx} {
+    global results_host spawn_id host_spawn prefix_ chan_status prompt
+
+    set chan_status($chanidx) ""
+    if {[info exists results_host($chanidx)]} {
+	set host $results_host($chanidx)
+#        puts "chanidx $chanidx on $host"
+	set spawn_id $host_spawn($host)
+	set chan [format "%02d" [expr $chanidx + 1]]
+	set f $prefix_$chan.status
+        regsub .*_ $host "" cpu
+	exp_send "requester $cpu status $chanidx $f\r"
+	expect -re {\r\n?requester: status (.*)\r\n?} {
+	    set chan_status($chanidx) $expect_out(1,string)
+	} timeout {
+            puts "get_channel_status: requester $cpu status $chanidx $f timed out";
+            flush
+        }
+        expect -re $prompt
+    } else {
+#        puts "no host for chanidx $chanidx"
+    }
+    put_channel_status $chanidx
+}
+
+proc change_state {host newstate} {
+    global hstate hcount available
+    if {$hstate($host) == "available"} {
+	set idx [lsearch $available $host]
+	set available [lreplace $available $idx $idx]
+    }
+    incr hcount($hstate($host)) -1
+    set hstate($host) $newstate
+    incr hcount($hstate($host))
+    if {$newstate == "available"} {
+        append available " $host"
+    }
+}
+
+proc next_host {} {
+    global spawn_list spawn_host index_to_idst runon global spawn_id msg_host msg_count results_host busy abort
+    global chan_status prompt host_status
+
+    expect  {
+	-i $spawn_list -re {requester: done ([^\r]*)\r\n?} {
+	    set spawn_id $expect_out(spawn_id)
+	    set chanidx $runon($spawn_id)
+            unset runon($spawn_id)
+	    set busy($chanidx) 0
+	    set chan_status($chanidx) $expect_out(1,string)
+            put_channel_status $chanidx
+            set host_status($spawn_host($spawn_id)) "waiting for"
+            after 1000 {showr [array get host_status]}
+            change_state $spawn_host($spawn_id) done
+            return "$spawn_host($spawn_id) done"
+        } -re "requester: ready\r\n?" {
+	    set spawn_id $expect_out(spawn_id)
+#            puts spawn_host($spawn_id)
+            array unset host_status $spawn_host($spawn_id)
+            showr [array get host_status]
+            change_state $spawn_host($spawn_id) available
+	    return $spawn_host($spawn_id)
+        } -re $prompt {
+	    set spawn_id $expect_out(spawn_id)
+            change_state $spawn_host($spawn_id) stopped
+            if {[info exists runon($spawn_id)]} {unset runon($spawn_id)}
+            return "$spawn_host($spawn_id) stopped"
+	} -re "\r\n?" {
+	    set spawn_id $expect_out(spawn_id)
+	    set host $spawn_host($spawn_id)
+            if {[info exists runon($spawn_id)]} {
+                set chanidx $runon($spawn_id)
+                incr msg_count($host)
+                if {[regexp {(\d+:\d+) ETA} $expect_out(buffer) junk time]} {
+                    .c itemconfig $index_to_idst($chanidx) -text "$host download $time" -fill black
+                } elseif {[regexp {\#(\d+).*ward (\d+)} $expect_out(buffer) junk try num]} {
+                    .c itemconfig $index_to_idst($chanidx) -text "$host threshold $num $try" -fill black
+                } elseif {[regexp {sorting|covariance} $expect_out(buffer) phase]} {
+                    .c itemconfig $index_to_idst($chanidx) -text "$host $phase" -fill black
+                } else {
+                    .c itemconfig $index_to_idst($chanidx) -text "running on $host: $msg_count($host)" -fill black
+                }
+                update idletasks
+            }
+	    if {[string compare $host $msg_host] != 0} {
+		puts "\nmessages from $host:"
+		set msg_host $host
+	    }
+	    regsub {[:space:]+$} $expect_out(buffer) "" txt
+	    puts -nonewline $txt
+            if {$abort} {return ""}
+	    exp_continue
+	} timeout {
+            if {$abort} {return ""}
+	    exp_continue
+	}
+    }
+}
+
+proc show list {
+    foreach {sys stat} $list {
+	lappend msg "$sys $stat"
+    }
+    .m.msg configure -text  [join [lsort $msg] "\n"]
+    update idletasks
+}
+
+proc showr list {
+    if {[llength $list] == 0} {
+        destroy .m
+        return
+    }
+    if {![winfo exists .m]} {
+        dialogmsg .m "" [expr [llength list] / 2]
+    }
+    set msg ""
+    foreach {sys stat} $list {
+	lappend msg "$stat $sys"
+    }
+    .m configure -height [expr [llength list] / 2]
+    .m.msg configure -text  [join [lsort $msg] "\n"]
+    update idletasks
+}
+
+proc showmsg msg {
+    if {[winfo exists .m.msg]} {
+	.m.msg configure -text  $msg
+	update idletasks
+    }
+}
+
+proc results {} {
+    global prefix_ datapath midpath id_to_index results_host host_spawn spawn_id myhost
+    global available ingo prompt
+    if {$ingo} {alert "not while spikesort is running"; return}
+    set items [.c find withtag selected]
+    if {[llength $items] > 0} {
+	set chan $id_to_index([lindex $items 0])
+    } else {
+	alert "no channel selected"
+	return
+    }
+    if {[info exists results_host($chan)]} {
+	set host $results_host($chan)
+    } else {
+	alert "no results for channel [expr $chan + 1]"
+	return
+    }
+    set chan [format "%02d" [expr $chan + 1]]
+    set f $prefix_$chan.pos
+
+    if {[info exists spawn_id]} {
+	set spawn_id_save $spawn_id
+    }
+    if {[info exists host_spawn($host)]} {
+	set spawn_id $host_spawn($host)
+	exp_send "tkss.tcl $f &\r"
+	expect -re $prompt
+	if {[info exists spawn_id_save]} {
+	    set spawn_id $spawn_id_save
+	}
+    } else {
+	alert "no connection to $host"
+    }
+}
+
+proc waveform {} {
+    global prefix_ datapath midpath id_to_index results_host host_spawn spawn_id myhost
+    global mypath ingo
+    if {$ingo} {alert "not while spikesort is running"; return}
+    set items [.c find withtag selected]
+    if {[llength $items] > 0} {
+	set chanidx $id_to_index([lindex $items 0])
+    } else {
+	alert "no channel selected"
+	return
+    }
+    set bounds [get_bounds $chanidx]
+    puts $bounds
+    set start ""
+    set end ""
+    if {[llength $bounds] == 2} {
+	set start [expr int([lindex $bounds 0] * 25000)]
+	set end [expr int([lindex $bounds 1] * 25000)]
+    }
+    puts "$start, $end"
+    set chan [format "%02d" [expr $chanidx + 1]]
+    set f $prefix_$chan.chan
+    set p $mypath/$midpath/$f
+    exec waveform.tcl $p $start $end &
+}
+
+proc diagram {} {
+    global prefix_ datapath midpath id_to_index results_host host_spawn spawn_id myhost
+    global mypath ingo
+    if {$ingo} {alert "not while spikesort is running"; return}
+    set items [.c find withtag selected]
+    if {[llength $items] > 0} {
+	set chanidx $id_to_index([lindex $items 0])
+    } else {
+	alert "no channel selected"
+	return
+    }
+    set timeout 60
+    copy_file $chanidx dot
+    set chan [format "%02d" [expr $chanidx + 1]]
+    set p $mypath/$midpath/$prefix_$chan.dot
+    set q $prefix_$chan.tmp
+    exec dot -Tps $p > $q
+    exec gv -scale=2 $q &
+}
+
+proc notes {} {
+    global prefix_ datapath midpath id_to_index results_host host_spawn spawn_id myhost
+    global mypath
+    set items [.c find withtag selected]
+    if {[llength $items] > 0} {
+	set chanidx $id_to_index([lindex $items 0])
+    } else {
+	alert "no channel selected"
+	return
+    }
+    set chan [format "%02d" [expr $chanidx + 1]]
+    set f $prefix_$chan.notes
+    set p $mypath/$midpath/$f
+    exec gedit $p &
+}
+
+proc connect {} {
+    global host_list spawn_id spawn_list spawn_host msg_count host_spawn connected env prefix available prompt
+    global hcount hstate
+    if {[info exists connected]} { return }
+    dialogmsg .m "" [llength $host_list]
+    foreach host $host_list {
+	set host_status($host) ""
+    }
+    show [array get host_status]
+    log_user 0
+    set uname [exec uname -s]
+    set ntty "-noecho"
+    if {[regexp -nocase cygwin $uname]} {
+	set ntty -nottycopy
+    }
+    set timeout 20
+
+    foreach host $host_list {
+        regsub _.* $host "" host_name
+	if {[spawn $ntty ssh -Y $host_name] != 0} {
+	    set host_status($host) spawn
+	    show [array get host_status]
+	    expect {
+		"Last login: " {set host_status($host) responding} 
+		eof {puts "ssh $host quit";  wait -i $expect_out(spawn_id); set host_status($host) quit; continue}
+		timeout {puts "ssh $host timed out"; set host_status($host) "timed out"; continue}
+	    }
+	    show [array get host_status]
+	    lappend ssh_list $host
+	    lappend spawn_list_0 $spawn_id
+	    set host_spawn($host) $spawn_id
+	    set spawn_host($spawn_id) $host
+		
+	} else {
+	    set host_status($host) "spawn failed"
+	    puts "spawn ssh $host failed"
+	}
+    }
+    set timeout 120
+    foreach host $ssh_list {
+	expect {
+	    -i $spawn_list_0 -re $prompt {
+		set host_status($spawn_host($expect_out(spawn_id))) ready
+		show [array get host_status]
+		lappend spawn_list $expect_out(spawn_id)
+		lappend connected $spawn_host($expect_out(spawn_id))
+		set msg_count($spawn_host($expect_out(spawn_id))) 0
+	    } eof {
+		set host_status($spawn_host($expect_out(spawn_id))) quit
+		show [array get host_status]
+		wait -i $expect_out(spawn_id)
+		continue
+	    } timeout {
+		set host_status($spawn_host($expect_out(spawn_id))) "timed out"
+		show [array get host_status]
+		close -i $expect_out(spawn_id)
+		wait -i $expect_out(spawn_id)
+		continue
+	    }
+	}
+    }
+    set disp $env(DISPLAY)
+    if {[regexp {^:} $disp]} {
+	set disp [exec hostname]$disp
+    }
+    set hcount(stopped) 0
+    set hcount(busy) 0
+    set hcount(done) 0
+    set hcount(available) 0
+    set available ""
+
+    foreach host $connected {
+	set spawn_id $host_spawn($host)
+	exp_send "stty cols 158\r"
+	expect -re $prompt
+#	exp_send "export DISPLAY=$disp\r"
+#	expect -re $prompt
+	exp_send "mkdir -p $prefix; cd $prefix\r"
+	expect -re $prompt
+	exp_send "ulimit -s unlimited\r"
+	expect -re $prompt
+        set hstate($host) stopped
+        incr hcount(stopped)
+    }
+    destroy .m
+}
+
+proc pick_todo {todo available} {
+    global results_host
+    set i 0
+    foreach chanidx $todo {
+	set j 0
+	foreach host $available {
+	    if {![info exists results_host($chanidx)] || $results_host($chanidx) == $host} {
+		return [list $i $j]
+	    }
+	    incr j
+	}
+	incr i
+    }
+    return [list]
+}
+
+proc start_requester {} {
+    global connected index_to_idst busy results_host runon available host_spawn prefix host_status
+    global hstate hcount
+    foreach host $connected {
+	set spawn_id $host_spawn($host)
+        regsub .*_ $host "" cpu
+	exp_send "requester $cpu $prefix\r"
+	expect {
+            -re {requester: running (\d+) \S+\r\n?} {
+                set chanidx $expect_out(1,string)
+                set busy{$chanidx} 1
+                set results_host($chanidx) $host
+                .c itemconfig $index_to_idst($chanidx) -text "running on $host" -fill black
+                set runon($spawn_id) $chanidx
+                change_state $host busy
+            } -re "requester: waiting\r\n?" {
+                set host_status($host) "waiting for"
+                change_state $host done
+            } -re "requester: ready\r\n?" {
+		lappend available $host
+                change_state $host available
+            } -re "requester\r\n?(.*)\r\n?.*$" {
+                alert "bad response from requester:\n$expect_out(1,string)"
+            } timeout {
+                alert "no response from requester on $host"
+            }
+        }
+    }
+    showr [array get host_status]
+}
+
+proc normal_buttons {} {
+    .bgo    configure -state normal
+    .bexit  configure -state normal
+    .bres   configure -state normal
+    .bupd   configure -state normal
+    .bwave  configure -state normal
+    .bdia   configure -state normal
+    .bnotes configure -state normal
+    .bmerge configure -state normal
+    .bstop  configure -foreground black -state disabled
+}
+
+proc delete_lockfile {} {
+    global hdrdir lockfile_name
+    file delete $hdrdir/$lockfile_name $hdrdir/lock_file
+    exit
+}
+
+proc go {} {
+    global index_to_idst channel_count runon spawn_id host_spawn todo available ingo
+    global abort msg_count prefix lockfile_name hdrdir connected hcount hstate prompt
+
+    if {$ingo} return
+    .bgo    configure -state disabled
+    .bexit  configure -state disabled
+    .bres   configure -state disabled
+    .bupd   configure -state disabled
+    .bwave  configure -state disabled
+    .bdia   configure -state disabled
+    .bnotes configure -state disabled
+    .bmerge configure -state disabled
+    .bstop  configure -foreground black -state disabled
+    set abort 0
+    set ingo 1
+
+    set lockfile_name [exec nfs_lock unique]
+    set msg [exec nfs_lock $hdrdir $lockfile_name]
+    if {$msg != ""} {
+        puts $msg
+        alert $msg
+        set ingo 0
+        return
+    }
+    trap delete_lockfile {INT TERM}
+
+    update_status
+
+    .bstop  configure -foreground red -state normal
+
+    set todo [list]
+    for {set n 0} {$n < $channel_count} {incr n} {
+	set stat [lindex [.c itemconfig $index_to_idst($n) -text] end]
+	if {[regexp "to do" $stat]} {
+	    lappend todo $n
+	} 
+    }
+    start_requester
+
+    set need_more 0
+    set died ""
+    while {[llength $todo] > 0} {
+	if {[llength $available] == 0 || $need_more} {
+            set host ""
+            while {!$abort && [llength $host] != 1} {
+                set host [next_host]
+            }
+	}
+	if {$abort} break
+	set todo_avail_idx [pick_todo $todo $available]
+	if {[llength $todo_avail_idx] < 2} {
+            set need_more 1
+	    continue
+	}
+        set need_more 0
+	set todo_idx [lindex $todo_avail_idx 0]
+	set avail_idx [lindex $todo_avail_idx 1]
+	set host [lindex $available $avail_idx]
+	set available [lreplace $available $avail_idx $avail_idx]
+        change_state $host busy
+	set chanidx [lindex $todo $todo_idx]
+	set todo [lreplace $todo $todo_idx $todo_idx]
+	set spawn_id $host_spawn($host)
+        set msg_count($host) 0
+	spikesort $host $chanidx
+	.c itemconfig $index_to_idst($chanidx) -text "running on $host" -fill black
+	update idletasks
+	set runon($spawn_id) $chanidx
+    }
+    destroy .m
+    set ccnt [llength $connected]
+
+    while {$hcount(stopped) < $ccnt} {
+        while {$hcount(done) + $hcount(available) > 0 || ($hcount(busy) && $abort)} {
+            foreach host $connected {
+                if {$hstate($host) == "done" || $hstate($host) == "available" || ($hstate($host) == "busy" && $abort)} {
+                    exp_send -i $host_spawn($host) \3
+                    while {$hstate($host) != "stopped"} next_host
+                }
+            }
+        }
+        if {$hcount(stopped) < $ccnt} next_host
+    }
+
+    update_status
+    if {!$abort} {tk_dialog .check_status "Please note" "$prefix done" "" 0 "OK"}
+
+    file delete $hdrdir/$lockfile_name $hdrdir/lock_file
+    trap SIG_DFL {INT TERM}
+    normal_buttons
+    set ingo 0
+}
+
+proc exit_button {} {
+    global spawn_list spawn_id spawn_host prompt
+    lappend dislist hosts "Disconnecting from"
+    showr $dislist
+    if {[info exists spawn_list]} {
+	foreach spawn_id $spawn_list {
+#	    puts "sending exit to $spawn_host($spawn_id)"
+	    if {[catch {exp_send "exit\r"}]} continue
+        }
+        set slist $spawn_list
+	foreach spawn_id $spawn_list {
+	    expect {
+                -i $slist -re ".+" {
+#                    puts "got $expect_out(buffer) from $spawn_host($expect_out(spawn_id))"
+                    exp_continue
+                }
+                eof {
+#                    puts "got eof from $spawn_host($expect_out(spawn_id))"
+                    lappend dislist $spawn_host($expect_out(spawn_id)) "disconnected from"
+                    showr $dislist
+                    set idx [lsearch $slist $expect_out(spawn_id)]
+                    set slist [lreplace $slist $idx $idx]
+                }
+                timeout {puts "$spawn_host($expect_out(spawn_id)) timed out"; exp_continue}
+            }
+        }
+	foreach spawn_id $spawn_list {
+	    set x [wait]
+            set spawn_id [lindex $x 1]
+#	    puts "disconnected from $spawn_host($spawn_id)"
+	}
+    }
+    exit
+}
+
+proc stop {} {
+    global abort
+    .bstop  configure -foreground black -state disabled
+
+    set abort 1
+    destroy .m
+}
+
+proc copy_file {chanidx type} {
+    global prefix_ transfer_type datapath midpath spawn_id myhost results_host index_to_ida host_spawn prompt
+    set chan [format "%02d" [expr $chanidx + 1]]
+    if {![info exists results_host($chanidx)]} {
+	return "No results for channel $chan"
+    }
+    set host $results_host($chanidx)
+    set spawn_id $host_spawn($host)
+    set f $prefix_$chan.$type
+    set p $datapath($host)/$midpath/$f
+    set a [.c itemcget $index_to_ida($chanidx) -text]
+
+    if       {$transfer_type($host) == "fs"  } { set cmd "cp $f \\\n$p"
+    } elseif {$transfer_type($host) == "sftp"} { set cmd "scp $f $p"    
+    } else {alert "unknown transfer type for $host: $transfer_type($host)"; exit 1}
+    exp_send "$cmd\r"
+    set result ok
+    showmsg "$cmd sent"
+    puts "$cmd sent"
+    set timeout 200
+    expect {
+	-nocase -re {no such [^\n]*} {
+	    set result "$expect_out(0,string) while doing\"$cmd\" on $host"
+	    exp_continue
+	}
+	-re $prompt {puts "got prompt"}
+	timeout {set result "$cmd timed out"}
+    }
+    showmsg "$cmd done"
+    return $result
+}
+
+proc merge {} {
+    global busy chan_status index_to_ida channel_count prefix prefix_ midpath myhost datapath index_to_idch
+    global e_array array_size array_electrode ingo
+    if {$ingo} {alert "not while spikesort is running"; return}
+
+    if {0} {
+	puts "busy $busy"
+	puts "channel_count $channel_count"
+	puts "prefix_ $prefix_"
+	puts "midpath $midpath"
+	puts "myhost $myhost"
+	puts "datapath($myhost) $datapath($myhost)"
+    }
+
+    dialogmsg .m "checking channels" 3
+    for {set n 0} {$n < $channel_count} {incr n} {
+	if {$busy($n)} {
+	    destroy .m
+	    alert "can't merge because channel [expr $n + 1] is busy"
+	    return
+	}
+	set a [.c itemcget $index_to_ida($n) -text]
+	if {$a == "S" && ![regexp E $chan_status($n)]} {
+	    destroy .m
+	    alert "can't merge because .edt has not been written for channel [expr $n + 1]"
+	    return
+	}
+	if {$a == "I"} {
+	    lappend hdtchans [expr $n + 1]
+	}
+    }    
+    showmsg "copying files"
+    set edt_count 0
+    for {set n 0} {$n < $channel_count} {incr n} {
+	set a [.c itemcget $index_to_ida($n) -text]
+	if {$a != "-"} {
+	    showmsg "copying edt $n"
+	    set result [copy_file $n edt]
+	    if {$result != "ok"} {destroy .m; alert "Merge failed: $result"; return}
+	    incr edt_count
+	}
+	if {$a == "S"} {
+	    showmsg "copying unt $n"
+	    set result [copy_file $n unt]
+	    if {$result != "ok"} {destroy .m; alert "Merge failed: $result"; return}
+	}
+    }
+    set f $prefix.chs
+    set p_chs $datapath($myhost)/$midpath/$f
+    puts "open $p_chs w"
+    set chs [open $p_chs w]
+    puts $chs $edt_count
+    puts "$chs $edt_count"
+    showmsg "generating chs file"
+    for {set n 0} {$n < $channel_count} {incr n} {
+	set a [.c itemcget $index_to_ida($n) -text]
+	if {$a == "-"} {continue}
+	set channum [expr $n + 1]
+	set chan [format "%02d" $channum]
+	set code [.c itemcget $index_to_idch($n) -text]
+	set code_start 0
+	set code_end 0
+	set ary $e_array($n)
+	set size $array_size($ary)
+	set electrode $array_electrode($n)
+	if {![regexp {^ *(\d+)-(\d+) *$} $code all code_start code_end]} {
+	    if {[regexp {^ *(\d+) *$} $code all code_start]} {set code_end $code_start}
+	}
+	set s [format "%d %d %d %d %d" $channum $code_start $code_end $size $electrode]
+	puts "$chs $s"
+	puts $chs $s
+	set f $prefix_$chan.unt
+	set p $datapath($myhost)/$midpath/$f
+	puts "open $p"
+	if {$size > 1} {
+	    set clk [expr [clock seconds] + 10]
+	    while {![file exists $p] && [clock seconds] < $clk} {
+		update
+	    }
+	}
+	if {[file exists $p]} {
+	    puts "$p exists"
+	    set unt [open $p]
+	    puts -nonewline $chs [read $unt]
+	    close $unt
+	} else {
+	    puts "$p does not exist"
+	    puts $chs 0
+	}
+    }	
+    puts "close $chs"
+    close $chs
+    showmsg "running merge"
+    puts "edt_merge $datapath($myhost)/$midpath/$prefix"
+    exec edt_merge $datapath($myhost)/$midpath/$prefix
+    showmsg "generating hdt file"
+    puts "chan2hdt $datapath($myhost)/$midpath/$prefix $hdtchans"
+    eval exec chan2hdt $datapath($myhost)/$midpath/$prefix $hdtchans
+    eval exec info_file.pl $datapath($myhost)/$midpath $prefix
+    destroy .m
+    alert "merge done"
+}
+
+proc update_status {} {
+    global channel_count ingo
+    .bupd configure -state disabled
+    get_channel_hosts
+    for {set n 0} {$n < $channel_count} {incr n} {
+	get_channel_status $n
+    }
+    if {$ingo} return
+    .bupd configure -state normal
+}
+
+
+set ingo 0
+set abort 0
+connect
+get_channel_hosts
+
+for {set n 0} {$n < $channel_count} {incr n} {
+    set busy($n) 0
+    get_channel_status $n
+}
+normal_buttons

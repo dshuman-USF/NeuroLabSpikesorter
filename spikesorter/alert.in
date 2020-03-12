@@ -1,0 +1,72 @@
+#!/usr/bin/tclsh
+
+package require Expect
+package require Tk
+
+set iwd [pwd]
+
+proc alert {text} {
+    wm title . "Please note"
+    wm iconname . Dialog
+    wm protocol . WM_DELETE_WINDOW { }
+
+    frame .bot
+    frame .top
+    pack .bot -side bottom -fill both
+    pack .top -side top -fill both -expand 1
+
+    label .msg -justify left -text $text -font "times 12"
+    pack .msg -in .top -side right -expand 1 -fill both -padx 3m -pady 3m
+
+    button .button -text OK -command {set done 1}
+    grid .button -in .bot -column 0 -row 0 -sticky ew -padx 10 -pady 4
+    grid columnconfigure .bot 0
+
+    bind . <Return> {set done 1}
+
+    wm withdraw .
+    update idletasks
+    set x [expr {[winfo screenwidth .]/2 - [winfo reqwidth .]/2 \
+	    - [winfo vrootx .]}]
+    set y [expr {[winfo screenheight .]/2 - [winfo reqheight .]/2 \
+	    - [winfo vrooty .]}]
+    wm geom . +$x+$y
+    wm deiconify .
+
+    set oldFocus [focus]
+    set oldGrab [grab current .]
+    if {[string compare $oldGrab ""]} {
+	set grabStatus [grab status $oldGrab]
+    }
+    grab .
+    focus .
+
+    vwait done
+    catch {focus $oldFocus}
+    catch {
+	bind . <Destroy> {}
+	destroy .
+    }
+    if {[string compare $oldGrab ""]} {
+	if {[string compare $grabStatus "global"]} {
+	    grab $oldGrab
+	} else {
+	    grab -global $oldGrab
+	}
+    }
+}
+
+tk scaling 1.58
+
+if {[string compare -length 2 $argv0 "./"] == 0} {
+    set path "$iwd[string range $argv0 1 end]"
+} elseif {[string compare -length 1 $argv0 "/"] != 0} {
+    set path "$iwd/$argv0"
+} else {set path $argv0}
+
+#set msg [read stdin]
+
+#alert "[file readlink "/proc/[pid]/exe"] [pid] $path $msg"
+
+alert [join $argv]
+

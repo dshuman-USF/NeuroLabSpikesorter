@@ -1,0 +1,50 @@
+\begin{thebibliography}{}
+
+\bibitem[Fee et~al., 1996]{fee1996automatic}
+Fee, M.~S., Mitra, P.~P., and Kleinfeld, D. (1996).
+\newblock Automatic sorting of multiple unit neuronal signals in the presence
+  of anisotropic and non-gaussian variability.
+\newblock {\em Journal of neuroscience methods}, 69(2):175--188.
+
+\bibitem[Georgescu et~al., 2003]{georgescu2003mean}
+Georgescu, B., Shimshoni, I., and Meer, P. (2003).
+\newblock Mean shift based clustering in high dimensions: A texture
+  classification example.
+\newblock In {\em Computer Vision, 2003. Proceedings. Ninth IEEE International
+  Conference on}, pages 456--463. IEEE.
+
+\bibitem[Gerstein and Clark, 1964]{gerstein1964simultaneous}
+Gerstein, G. and Clark, W. (1964).
+\newblock Simultaneous studies of firing patterns in several neurons.
+\newblock {\em Science}, 143(3612):1325--1327.
+
+\bibitem[Harris et~al., 2000]{harris2000accuracy}
+Harris, K.~D., Henze, D.~A., Csicsvari, J., Hirase, H., and Buzs{\'a}ki, G.
+  (2000).
+\newblock Accuracy of tetrode spike separation as determined by simultaneous
+  intracellular and extracellular measurements.
+\newblock {\em Journal of neurophysiology}, 84(1):401--414.
+
+\bibitem[Kreiter et~al., 1989]{kreiter1989low}
+Kreiter, A.~K., Aertsen, A.~M., and Gerstein, G.~L. (1989).
+\newblock A low-cost single-board solution for real-time, unsupervised waveform
+  classification of multineuron recordings.
+\newblock {\em Journal of neuroscience methods}, 30(1):59--69.
+
+\bibitem[Letelier and Weber, 2000]{letelier2000spike}
+Letelier, J.~C. and Weber, P.~P. (2000).
+\newblock Spike sorting based on discrete wavelet transform coefficients.
+\newblock {\em Journal of neuroscience methods}, 101(2):93--106.
+
+\bibitem[Lewicki, 1998]{lewicki1998review}
+Lewicki, M.~S. (1998).
+\newblock A review of methods for spike sorting: the detection and
+  classification of neural action potentials.
+\newblock {\em Network: Computation in Neural Systems}, 9(4):R53--R78.
+
+\bibitem[Musial et~al., 2002]{musial2002signal}
+Musial, P., Baker, S., Gerstein, G., King, E., and Keating, J. (2002).
+\newblock Signal-to-noise ratio improvement in multiple electrode recording.
+\newblock {\em Journal of neuroscience methods}, 115(1):29--43.
+
+\end{thebibliography}

@@ -1,0 +1,762 @@
+2020-02-19  dshuman@usf.edu
+
+	* Makefile.am: Add in support for github and GPL notices.
+	* configure.ac: Bump to 0.18.1. Add in gpl headers, no changes to the code.
+
+2018-01-22  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.18.0
+
+	* tkss.c (MWaveDisplay): add alignment marker to movie
+
+2017-08-17  dshuman@health.usf.edu
+
+	* configure.ac: New libgsl-dev breaks package. Rebuild with new libs. No
+	code changes.
+	* configure.ac: Bump to rev 0.17.5
+
+2017-02-03  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.17.4
+
+	* tkss.c (parse_long, print_long, longint_option, configSpecs):
+	* waveform.c (parse_long, print_long, longint_option, configSpecs):
+	use TK_CONFIG_CUSTOM instead of TK_CONFIG_INT for long int
+	options.  Fixes "integer value too large" error caused by a change
+	in Tk.
+
+2017-02-02  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.17.3
+
+	* edt_merge.c (get_merge_nums): assign 'S' to the 201-299 range
+	instead of 'C'
+
+2016-05-18  Russell O'Connor  <russ@tampabay.rr.com>
+
+	* configure.ac: bump rev to 0.17.2
+
+	* tkss.c (get_hist): sort spike times before calculating ISI
+	histogram.  Fixes crash when shift changes spike order.
+
+	* configure.ac: bump rev to 0.17.1
+
+	* tkss.tcl (do_recolor): don't reconfigure scatterplot unless it
+	is up.  Fixes error message when RECOLOR is clicked.
+
+	* configure.ac: bump rev to 0.17.0
+
+	* tkss.c (write_edt): free idt after use.  Fixes memory leak.
+
+	* user_guide.tex:
+	* tkss.tcl.in
+	(update_t_hist, do_recolor):
+	* tkss.c:
+	(MWaveDisplay, MWaveConfigure, get_next_mwave, SplotDisplay)
+	(get_units, get_color, recolor, Tcl_AppInit):
+	* Makefile.am (tkss_LDADD, tkss_CPPFLAGS): add RECOLOR button.
+
+2016-05-13  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.16.1
+
+	* tkss.c (write_edt): sort .edt lines before writing them out.
+	Fixes out-of-order codes that were keeping the merge from
+	completing.
+
+2016-05-12  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.16.0
+
+	* user_guide.tex:
+	* Makefile.am (user_guide.pdf): Convert user_guide from .odt to
+	LaTeX, and update it.
+
+	* spikesort_control_panel.in (alert): add option to specify an
+	alternate host_list file.
+
+2016-05-09  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.15.0
+
+2016-05-05  Russell O'Connor  <russ@debianUSB>
+
+	* waveform.c (SquareCmd): use Tcl_SetResult instead of assigning
+	to interp->result.  Fixes deprecated API.
+
+	* tkss.tcl.in (shift):
+	* tkss.c: add "shift" feature
+
+	* align.cc:
+	* Makefile.am (bin_PROGRAMS, align_SOURCES, align_CPPFLAGS)
+	(align_LDADD): add "align" program
+
+	* debian/control (Build-Depends): include only necessary packages.
+
+	* getline.c:
+	* Makefile.am:
+	* configure.ac: use pkg-config and hard-coded flags for libraries
+	instead of custom autoconf tests.  Delete option to include
+	library source in the package, and delete Cygwin option.
+
+2016-01-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.14.1, rebuild with libgsl2
+
+	* debian/control (Build-Depends): add libreadline6-dev.  Fixes
+	FTBFS.
+
+2015-11-13  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.14.0
+
+	* utilities.tex:
+	* crossings2pos.c:
+	(usage, thr2ok, get_thr2, main): add second threshold feature
+
+2015-09-22  Russell O'Connor  <roconnor@health.usf.edu>
+
+
+	* configure.ac: bump rev to 0.13.0
+
+	* utilities.tex:
+	* Makefile.am (integrate_SOURCES, AM_CXXFLAGS):
+	* configure.ac:  Add a subset feature to integrate, and minimize
+	the startup ramp.
+
+2015-08-21  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.12.4
+
+	* integrate.c:
+	(get_maxmin, do_edt): rectify around the mean, not around zero.
+	Fixes bad "integrate" results when the mean is not zero.
+
+2015-05-27  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.12.3
+
+	* user_guide.odt: update
+
+2014-08-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.12.2
+
+	* user_guide.odt: updated by lsegers
+
+2014-07-30  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.12.1
+
+	* rpls.c (main): Don't put an I or E pulse in the output file if
+	its time is earlier than the previously written pulse.  Fixes a
+	spikesorter merge crash in edt_merge when the phrenic .chan file
+	has giant stim noise spikes on it, causing rpls to want to put IE
+	codes out of order.
+
+	* edt_merge.c (min_time): Show a better error message when codes
+	are out of order in an input file.
+
+	* region.c (region_add_data, region_one_spline_init)
+	(region_spline_init, region_peak_distance_at_start)
+	(residue_spline, region_unclassified, cluster_1d)
+	(revisit_assignments_1):
+	* mpk_regions.c (check_centers, map_radius_0, get_wmat_n)
+	(fillbuf, free_snap, get_planes, find_block, write_wdt)
+	(ctr_pair_offset):
+	* min.c (fmin2):
+	* edt_merge.c (second_choice):
+	* cspline.c (cspline_eval): Change DIE to exit(DIE).  Fixes
+	compiler warning.
+
+	* cpls.c (main): Change ISM to ISAMP.  Fixes access outside the
+	array.  No known symptoms.
+
+	* region.c:
+	* nde.h:
+	* mpk_regions.c: untabify
+
+2014-06-10  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.12.0
+
+	* edt_merge.c (get_merge_nums): change 201-299 from M to C, and
+	701-799 from 'K' to 'D'
+
+	* spikesort_control_panel.in: change 'mid VRG' to 'C1 & C2' for
+	201-299, and 'NTS/DRG' to 'NTS' for 701-799.
+
+2014-05-16  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.12
+
+	* mpk_regions.c (main): don't check for threshold crossings if
+	user specified threshold.  Fixes "signal doesn't cross threshold"
+	error when there are too few spikes in first 8MB.
+
+2014-04-26  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.11
+
+	* region.c (next_spike): don't return a (clipped) spike if it's
+	too close to the end of the region.  Fixes exit before completion
+	in some cases of wild noise.
+
+	* requester.c (check_exe): ignore " (deleted)" in the
+	/proc/PID/exe link value.  Fixes running channels coming up as "to
+	do" in spikesort_control_panel when bash is updated during a
+	spikesort.
+
+2014-04-23  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.10
+
+	* tkss.tcl (update_t_hist, cursor):
+	* tkss.tcl.in (update_hist):
+	* waveform.tcl:
+	(set_dr_times, new_ymag, scroll, pick, mouse): tcl8.5 format the
+	results of expr differently, so use explicit formats.  Fixes
+	excessively long numbers in display.
+
+	* configure.ac: bump rev to 0.11.9
+
+	* tkss.c (get_color): replace Tcl_AppendElement with
+	Tcl_SetResult.  In tcl8.5, Tcl_AppendElement puts braces around
+	the color string, maing it unrecognizable to -configure.  Fixes
+	crash in tkss.tcl.
+
+2014-04-22  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.8
+
+	* region.c (next_spike): change handling of clipped spikes.  Fixes
+	termination before completion on some data with severe noise bursts.
+
+	* Makefile.am (tkss_LDADD, waveform_LDADD):
+	* debian/control (Build-Depends):
+	* acinclude.m4: update tcl/tk from 8.4 to 8.5
+
+2014-04-08  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.7
+
+	* utilities.tex:
+	* info_file.pl: create *_info_curr.xls as well as *_info_orig.xls
+	and document same.
+
+	* configure.ac: bump rev to 0.11.6
+
+	* utilities.tex: add documentation for info_file.pl
+
+	* info_file.pl: change "template" to "coordinate spreadsheet" in
+	usage message to be consistent with our naming convention.
+
+2014-03-27  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.5
+
+	* debian/postinst.template: make this a link to
+	/home/roconnor/common/postinst.template.  Change new_version_dsc
+	to new_version.dsc.  Fixes deletion of earlier versions from
+	/lab/SOURCES.  Add a command to the 'configure' case to move older
+	versions to 'old' directory under /lab/SOURCES.
+
+	* info_file.pl:
+	(getvals): use consecutive integers starting with 1 for the
+	reference electrode pseudo-cell merged channel numbers (mchan),
+	rather than their dchan value, and limit the number of reference
+	electrodes to 50 so as not to overlap with the merged channel
+	number range for normal cells.  Removes the restriction that
+	reference electrodes have dchan numbers less than or equal to 88.
+
+2014-03-26  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* Makefile.am (SRC_FILES): add bin_SCRIPTS to SRC_FILES.  Makes
+	the file generated by 'make srcfiles' more inclusive.
+
+2014-03-25  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.4
+
+	* info_file.pl (array_letter): reset %dchan iterator before
+	'each()' loop.  Fixes error message during merge.  This may have
+	caused "no cell has xx as a ref" errors.
+
+	* info_file.pl (check): don't check for the 'DM' label in the
+	coordinate spreadsheet.  Allows info_file.pl to be used on Cygnus
+	and DAQ experiments.
+
+	* info_file.pl (check, array_letter): remove debug print
+	statements.
+
+2014-03-20  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* tkss.tcl.in (spikesort): remove 88 channel limit when invoking
+	spikesort with the button.
+
+	* spikesort_control_panel.in (get_channel_hosts): use * instead of
+	??  to allow for 3-digit chan numbers
+
+	* configure.ac: bump rev to 0.11.3
+
+	* debian/control (Depends): add graphviz, gedit, gv.  Fixes
+	missing functionality when these haven't been installed.
+
+	* spikesort_control_panel.in: make screen wide enough for three
+	columns
+
+	* spikesort_control_panel.in: check for / in host_list path and
+	adjust hdrfile accordingly.  Fixes use of / in host_list.
+
+
+2014-03-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.2
+
+	* Makefile.am (dist_doc_DATA): consolidate multiple definitions.
+	Fixes missing README
+
+	* configure.ac: bump rev to 0.11.1
+
+	* Makefile.am (dist_doc_DATA): add utilities.pdf and
+	user_guide.pdf
+
+2014-03-05  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.11.0
+
+	* crossings2edt.c (_GNU_SOURCE): add for declaration of strdup.
+	Silences compiler warning.
+
+	* crossings2pos.c (main): delete unused variable 'posidx'.
+	Silences compiler warnings.
+
+	* Makefile.am (EXTRA_DIST, utilities.pdf):
+	* utilities.tex: Add documentation for crossings2edt,
+	crossings2pos, dmx, dmx_split, split_merge_abf, and tkss.tcl.
+
+	* user_guide.odt:
+	* Makefile.am (EXTRA_DIST, user_guide.pdf): add user guide to
+	package
+
+2014-03-04  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* crossings2pos.c (usage): add " > new.pos" to usage message
+
+	* util.c:
+	* crossings2pos.c:
+	* crossings2edt.c:
+	* Makefile.am (bin_PROGRAMS, crossings2pos_SOURCES)
+	(crossings2edt_SOURCES): add crossings2pos and crossings2edt to
+	package.
+
+2014-02-11  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.20
+
+	* old_requester.c (old_requester, has_open, check_exe, err)
+	(get_starttime, die, run_job):
+	* requester.c (main, has_open, check_exe, err, get_starttime)
+	(die, run_job):
+	* filter60.c:
+	(main):
+	* dup_ids.c (main):
+	* nfs_lock.c (main, get_starttime):
+	* trachpls.c (main):
+	* cpls.c (main):
+	* region.c (get_component_raw):
+	* chan2hdt.c (main, file_open):
+	* edt_merge.c (get_merge_nums, get_header, merge):
+	* waveform.c (get_sample_count, open_chan):
+	* rpls.c (main):
+	* tkss.c (MWaveConfigure, merge_version, new_mrg, match_map)
+	(new_map, get_doublet, wait_pid, get_mwaves, get_distance)
+	(fromzero, get_color, get_last_time, get_maxbin, get_splot)
+	(get_waves, get_hist, get_t_hist, get_units, read_versions)
+	(open_spl, open_wdt, open_pos):
+	* region.c (components_to_octave, get_component_raw)
+	(do_decompose_region, decompose_region, subtract_center)
+	(attempt_to_octave, check_distance):
+	* pdfrender.c (newfile):
+	* mpk_regions.c (main, region_adjust_for_clustering): check return
+	values of asprintf, fscanf, etc.  Silences warnings when compiling
+	with DEB_BUILD_HARDENING=1
+
+	* Makefile.am (install-exec-hook): delete the copy to /lab/SOURCES
+	and add $(DESTDIR) to the path for linking digitize -> integrate
+	so it can be built as a Debian package
+	(EXTRA_DIST): add debian
+
+2014-02-07  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* Makefile.am (bin_SCRIPTS, EXTRA_DIST): remove xls2csv.pl.  atlas
+	and xanalysis both install it.
+
+2014-01-23  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.19
+
+	* waveform.c (open_chan, get_sample_count):
+	* tkss.c (MWaveConfigure, get_mwaves, get_distance, get_units)
+	(get_maxbin, get_last_time, wait_pid, get_color, get_waves)
+	(get_splot, fromzero, get_t_hist, get_hist, open_pos, open_wdt)
+	(open_spl, get_doublet): change some sprintf's to asprintf's.
+	Fixes crash after Debian's hardening for the package repository.
+
+2013-10-04  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.18
+
+	* tkss.c (get_next_mwave): add 15ms minimum delay between movie
+	frames.
+
+2013-09-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.17
+
+	* alert.in:
+	use tclsh with "package require Expect" and "package require Tk"
+	instead of expectk, because expectk has been removed from expect
+	5.45.
+
+2013-05-30  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.16
+
+	* region.c (next_spike): handle case of a clipped spike that goes
+	rail-to-rail from one sample to the next.  Fixed abort on
+	2013-03-19_001_07.chan.
+
+2013-01-22  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.15
+
+	* spikesort_control_panel.in (spikesort): add the -m option to
+	muph
+
+2012-11-28  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.14
+
+	* Makefile.am (filter60_LDADD): change from filter60_LDFLAGS.
+	Fixes failure to link with gcc version 3.3-1ubuntu.
+
+	* configure.ac: add AM_PROG_CC_C_O, needed for per-target CFLAGS.
+	Fixes autoreconf error.
+
+2012-09-26  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.13
+
+	* spikesort_control_panel.in (checkstat): change 700's from CVLM
+	to NTS/DRG.
+
+2012-06-21  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.12
+
+	* rpls.c (main):
+	* tkss.c (WaveDisplay, SplotDisplay):
+	* region.c (spline_peak, center_window_start)
+	(components_to_octave, component_residue_correlation)
+	(decompose_unclassified_regions):
+	* pdfrender.c (create_variance_histograms):
+	* mpk_regions.c (adjust_peaks_0, region_filter):
+	* window.c (show_text):
+	* min.c (fmin1):
+	Fix unused and uninitialized variables.
+
+	* Makefile.am (muph_CFLAGS): add --std=c99
+	(rpls_LDADD, muph_LDADD): add GSL_LIBS
+
+	* muph.c:
+	* rpls.c:
+	new versions from mup.c and rpulse.c
+
+2011-09-20  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.11
+
+	* min.c (fmin2, fmin1): delete unused start_time
+
+	* spikesort_control_panel.in:
+	* acinclude.m4 (ss_pass):
+	use tclsh with "package require Expect" and "package require Tk"
+	instead of expectk, because expectk has been removed from expect
+	5.45.
+
+2011-07-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.10
+
+	* region.c (spline_peak_1): don't do out-of-bounds spline.  Fixes
+	segfault.
+
+2011-04-27  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.9
+
+	* configure.ac: look for sem_post in libpthread instead of librt:
+	it's apparently not in librt any more.  Fixes failure of dmx_th.c
+	to compile.
+
+2011-01-18  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.8
+
+	* Makefile.am (dist_doc_DATA): install README at "make install"
+	time
+
+	* spikesort_control_panel.in: If there is a .lbl file, don't try
+	to read the header file.  Mark all the channels enabled for which
+	there is a line (empty or not) in the .lbl file, instead of
+	reading the "enabled" flags from the header file.  Eliminates the
+	need to actually have a header file.
+
+	If a channel label is not recognized, use empty defaults for the
+	work and number fields instead of aborting.  Makes it possible to
+	use non-standard channel labels.
+
+2010-06-30  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.7
+
+	* configure.ac:
+	* Makefile.am (bin_PROGRAMS):
+	* filter60.c (main): add program to filter 60Hz and first 25
+	harmonics from a chan file.
+
+2010-06-03  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.6
+
+	* muph.c: revert half-baked change made in 0.10.1.  Fixes
+	continuous spikes in first 320 seconds.
+
+2010-04-28  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.5
+
+	* region.c (region_classify): don't skip a region (type -3)
+	without also skipping the peaks in it.  Fixes an early segfault on
+	some data.
+
+2010-03-19  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.4
+
+	* info_file.pl: fix usage message to report proper location at
+	which info_orig file will be written.
+	(emsg): don't set $sheet unless the sheet has coordinate data, as
+	opposed to instructions.  Fixes experiment name, etc., not
+	appearing in the info file.
+
+	* configure.ac: bump rev to 0.10.3
+
+	* info_file.pl: define $sheet before using it.
+
+	* configure.ac: bump rev to 0.10.2
+
+	* info_file.pl: skip sheets with text in cell 0,0 that begins with
+	"Calibration" or "Using", and allow a certain text in the
+	"Experiment" cell of the second column of a single column sheet,
+	for Lauren's Bolser templates.
+	(array_letter): put parens around the "my" list.  Fixes a syntax
+	error.
+
+2009-05-29  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* nfs_lock.c (main): use "m" instead of "a" as a length modifier
+	in the sscanf conversion specifier, as the compiler may not
+	recognize the "a".
+
+	* dmx_split.c (_GNU_SOURCE):
+	* split_merge_abf.c (_GNU_SOURCE):
+	define to quiet warning about strdup
+
+	* configure.ac: bump rev to 0.10.1
+
+2009-05-26  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* README: note that /var/local/requests/cpu* directories should
+	have rwxrwxrwx permissions.
+
+2009-05-11  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* Makefile.am (dup_ids_SOURCES, bin_PROGRAMS): add dup_ids
+
+2009-05-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* edt2pos.c (main): 
+	* Makefile.am (bin_PROGRAMS, edt2pos_SOURCES): 
+	add edt2pos
+	
+2009-05-04  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* spikesort_control_panel.in: make 601-699 "Lat. Column (L)" and
+	801-899 "Lat. Column (R)"
+
+2009-05-01  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.10.0
+
+	* spikesort_control_panel.in (spikesort): 
+	* requester.c (main):
+	add host to nohup file and job number file so that multiple hosts
+	can share home directories
+
+2009-04-27  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* spikesort_control_panel.in: wait for prompt after getting
+	requester status string so the next command does not hang the
+	connection.  Disable dispatch and stop dispatch button immediately
+	when pressed, so the user will know it took.
+
+	* Makefile.am (requester_SOURCES): 
+	* old_requester.c:
+	* requester.c: call old_requester if argc is 2 or 4, for backward
+	compatibilitya
+	
+	* requester.c:
+	* spikesort_control_panel.in: 
+	add cpu number to requests directory, nohup file, and job number
+	file so that multiple spikesorts can run on one host.
+
+	* configure.ac: bump rev to 0.9.30
+
+	* region.c: delete unused component_val routine
+
+2009-01-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* spikesort_control_panel.in: change gv argument from "-scale +2"
+	to "-scale=2" to fix DIAGRAM feature that broke due to changes in
+	gv
+
+2008-08-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* muph.c (main): give error message on remove or rename failure
+
+2008-02-06  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.9.29
+
+	* region.c: stdlib.h instead of malloc.h on Apple systems
+	(malloc_usable_size): define to return 1 on Apple systems
+	(decompose_unclassified_regions): take out mallinfo calls on
+	Apple systems
+
+	* dmx.h (fopen64, etc): remove the "64" on Apple systems
+
+	* Makefile.am: compile requester only on linux, add getline.c to
+	nfs_lock sources if not on linux
+
+	* configure.ac: add AM_CONDITIONAL for LINUX
+
+2008-01-22  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.9.28
+
+	* waveform.tcl: set the initial width on the first configure,
+	rather than the first expose and 6ms after startup.  Fixes
+	intermittent bad size.
+	Use 'h' toggle instead of shift for stretching waveform.  Make
+	background blue in stretch mode.  The shift-resize seems to have
+	been co-opted by the window manager for maximizing.
+
+2008-01-18  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.9.27
+
+	* waveform.c (SquareCmd): 
+	* tkss.c (SquareCmd): initialize squarePtr time, data, type, and
+	yscale.  Fixes tkss.tcl crashing with a segfault on cisc2.
+
+2008-01-17  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.9.26
+
+	* tkss.tcl.in:  isolate -data option for special handling
+
+	* configure.ac: bump rev to 0.9.25
+
+	* tkss.tcl: isolate -data option for special handling
+
+	* configure.ac: bump rev to 0.9.24
+
+	* tkss.c (SquareConfigure): handle "-data" option specially
+	so it works on 64-bit systems.
+
+2008-01-03  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.9.23
+
+	* waveform.c (SquareConfigure): handle "-data" option specially
+	so it works on 64-bit systems.  Fixes waveform.tcl crashing with a
+	segfault on cisc1 and cisc2.
+
+2008-01-02  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.9.22
+
+	* Makefile.am (EXTRA_DIST): add xls2csv.pl
+
+	* requester.c (main): comment out unused rdtsc stuff and delete
+	the include of <asm/msr.h> that was giving compile errors.
+
+2007-08-17  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* waveform.tcl: set geometry after 6 ms instead of immediately.
+	Fixes window coming up larger in height than requested.
+	In set_dr_times, don't set xscale until the width is greater than
+	200, instead of > 1.  Fixes right_time being slightly off.
+	
+2007-05-18  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* Makefile.am (bin_SCRIPTS): add xls2csv.pl
+
+2007-04-23  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* configure.ac: bump rev to 0.9.21
+
+2007-04-13  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* spikesort_control_panel.in (copy_file): set timeout for
+	copy_file to 200.  Fixes failure of merge to complete.
+
+2006-11-28  Russell O'Connor  <roconnor@health.usf.edu>
+
+	* spikesort_control_panel.in: get_bounds: allow characters between
+	the dollar sign and the space of the prompt.
+
+2006-07-17  Russell O'Connor  <roconnor@(none)>
+
+	* spikesort_control_panel.in: set test to 0 before conditionally
+	setting it, so it will work in non-test mode.
+
+2006-07-12  Russell O'Connor  <roconnor@(none)>
+
+	* info_file.pl: write the info file in /oberon/experiments instead
+	of /oberon/datamax
+
+	* extensive changes to spikesort_control_panel for "nohup", plus
+	requester and nfs_lock
+
+2006-06-23  Russell O'Connor  <roconnor@(none)>
+
+	* Makefile.am (requester_SOURCES): add requester to makefile
+
+2006-06-22  Russell O'Connor  <roconnor@(none)>
+
+	* tkss.c: make Square data long to hold pointer for amd64
+	atol, not atoi to pass amd64 pointer
+	long cast for amd64
+	long, not int, to hold pointer for amd64
+
+	* nde.h (TREALLOC, TMALLOC, TCALLOC): change cast from int to long
+	for amd64
+
+2006-06-02  Russell O'Connor  <roconnor@(none)>
+
+	* util.h (TREALLOC): change pointer casts to long and %d to %ld
+	for amd64
+

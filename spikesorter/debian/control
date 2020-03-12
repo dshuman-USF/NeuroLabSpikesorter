@@ -1,0 +1,37 @@
+Source: spikesorter
+Section: local
+Priority: extra
+Maintainer: Russell O'Connor <roconnor@health.usf.edu>
+Build-Depends: debhelper (>= 8.0.0), autotools-dev,
+ libao-dev,
+ libmeschach-dev,
+ libgsl-dev,
+ tcl-dev,
+ tk-dev,
+ libx11-dev,
+ libfftw3-dev,
+ fftw-dev,
+ libreadline-dev,
+ latexmk
+Standards-Version: 3.9.4
+Homepage: cisc3
+#Vcs-Git: git://git.debian.org/collab-maint/spikesorter.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/spikesorter.git;a=summary
+
+Package: spikesorter
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends} ${perl:Depends}, graphviz, gedit, gv
+Description: program to generate spike (event) files from extracellular neural recordings
+ The spikesorter program does offline analysis of neural recordings in
+ .chan files to find waveforms corresponding to neuronal action
+ potentials, and writes the results to .edt spike files.  There can be
+ waveforms for multiple nearby neurons in a single .chan file
+ recording, and the spikesorter attempts to classify them according to
+ which neuron they came from, based largely on the shape of the action
+ potential waveform.  The analysis can be distributed by .chan file
+ across any number of computers, and the package provides a single
+ control panel to monitor the results from all the computers.  The
+ user finalizes the classification by deleting poor classifications
+ and combining ones that the spikesorter incorrectly distinguished.
+ The control panel provides a variety of tools for assessing the
+ classifications.

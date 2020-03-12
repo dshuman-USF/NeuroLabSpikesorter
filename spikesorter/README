@@ -1,0 +1,159 @@
+
+When spikesort_control_panel is run at USF on the blades, it should be
+run as user "ssu".
+
+At the command prompt, type spikesort_control_panel followed by the
+path to the DataMax file.
+
+The DataMax file can be either the entire recording or just the header
+(the .dmx file), and it must be in the same directory as the split-out
+channel files.
+
+The DataMax file name and the channel file names must be related in a
+certain way.  First, they must share the same prefix. The DataMax file
+name must consist of just the prefix, a dot, and a filetype
+(= extension).  If the DataMax file name is of the form
+
+	prefix.typ
+
+then the channel file names must be of the form
+
+	prefix_typ_NN.chan
+
+where NN is the channel number.
+
+The DataMax file with the entire recording in it normally has a name
+whose filetype (extension) is a 3-digit recording number, and this is
+what the spikesort_control_panel expects to be pointed at.  But it is
+likely that you will want to use just the header file, which normally
+has a .dmx extension.  And it is normal that the channel files have
+the recording number embedded in their names, so you need to point
+spikesort_control_panel at a file with a recording number extension.
+You can accomplish this by creating a symbolic link to the header
+file, and giving the symbolic link the required name.
+
+You can do this after changing to the directory with the .dmx file in
+it, by typing, at the command prompt, a command of the form
+
+	ln -s prefix.dmx prefix.001
+
+So with our current conventions, you would type, for example:
+
+spikesort_control_panel /datamax/2004-12-01/clean/2004-12-01.001
+
+--------------------------------------------------------------------------------
+
+The spikesort_control_panel needs to know about the labels that are
+used on the channels.  The processing that it defaults to depends on
+the first word of the channel label.  The label first words that it
+knows about are:
+
+Pegasus
+Adj
+Gemini
+Medusa
+N1
+N2
+N3
+N4
+N5
+Blood
+CO2
+Tracheal
+Stimulus
+Channel
+Timing
+Microstim
+
+If a new one is added, spikesort_control_panel needs to be modified to
+know about it.
+
+--------------------------------------------------------------------------------
+
+Starting with version 0.10.0, multiple spikesorts can be run on one
+host, and the format of the /var/local/requests directory and the
+/etc/spikesorter/host_list file have changed to support this.
+
+Each hostname in the /etc/spikesorter/host_list file must now end with
+an underscore followed by a number (with no space between)
+representing the cpu number on the host, starting with 0.
+
+The /var/local/requests directory must have subdirectories named cpu0,
+cpu1, etc, for as many cpus as you want to allow spikesorts to use.
+The directories should be owned by root with rwxrwxrwx permissions.
+
+--------------------------------------------------------------------------------
+
+THE HEADER FILE AND CHANNEL LABELS
+
+The spikesort_control_panel program is started from the command line
+with one argument: the absolute path to a header file.  The name of
+the header file, after any dots have been changed to underscores, is
+used as a prefix for the names of all the spikesorter files associated
+with that recording, and the directory containing the header file is
+where the .chan input files are found and .edt output file for the
+spikesort is placed.
+
+On the spikesort control panel, each channel has two one-letter fields
+that specify the work to be done on the channel, followed by one label
+field, followed by a number field that specifies the range to be used
+for cell ID's for any cells found on that channel.
+
+The labels are read from the header file, and default values for the
+work and number fields are set based on the label if the label is
+recognized by spikesort_control_panel.  Prior to version 0.10.8, if
+the label was not recognized, spikesort_control_panel would exit with
+an error message.  Starting with version 0.10.8,
+spikesort_control_panel will use empty defaults for the work and
+number fields if the label is not recognized.
+
+A set of flags are read from the header file that indicate for each
+channel whether it is enabled.  A channel that is not enabled is
+greyed out.
+
+When a work field is changed, all the work fields (including the
+change) are written to a file named like prefix.wrk.
+
+When a label field is changed, all the label fields (including the
+change) are written to a file named like prefix.lbl.
+
+When a number field is changed, all the number fields (including the
+change) are written to a file named like prefix.num.
+
+If a .wrk file exists when spikesort_control_panel is started, the
+work values are read from that file.
+
+If a .lbl file exists when spikesort_control_panel is started, the
+label values are read from that file, instead of the header file.
+
+If a .num file exists when spikesort_control_panel is started, the
+number values are read from that file.
+
+Prior to version 0.10.8, the "enabled" flags were still read from the
+header file even if a .lbl file existed.  Starting with version
+0.10.8, if a .lbl files exists, an "enabled" flag is set for every
+line in the .lbl file, even if it is a blank line, and the header file
+is not read.  This makes it possible to run spikesort_control_panel
+without a header file when a .lbl file exists, but the path must still
+be specified as if the header file existed, as a way of specifying the
+directory and the prefix.
+
+The .wrk, .lbl, and .num files can be created or edited by hand using
+a text editor like gedit or emacs.  The format is simply one line per
+channel - looked at an automatically generated one for details.  Don't
+edit it on Windows unless you know how to preserve the format,
+including not adding CR characters to the line endings.
+
+The .wrk, .lbl, and .num files created or edited by hand or just taken
+from a previous experiment and renamed can be used in a new experiment
+by placing them in the same directory as the header file (or the
+directory that the header file would be in if it existed).  This saves
+having to type it all in again.
+
+The .wrk, .lbl, and .num files can also be edited by starting a
+spikesort_control_panel with the unedited versions, and making the
+changes on the control panel.  The changes will be written to the
+files as they are made.  If you are adding new channels above the
+existing channels, though, this won't work well and you are better off
+with an editor.
+
