@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT(USF Spikesorter, 0.18.1, dshuman@usf.edu, spikesorter)
+AC_INIT(USF Spikesorter, 0.18.3, dshuman@usf.edu, spikesorter)
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([cdf.c])
 AC_CONFIG_HEADER([config.h])

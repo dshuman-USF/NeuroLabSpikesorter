@@ -5,7 +5,9 @@
 #export DH_VERBOSE=1
 
 %:
-	dh $@  --with autotools-dev
+	dh $@
+
+#dh $@  --with autotools-dev
 
 #this is where things get installed.  The default is /usr 
 override_dh_auto_configure: 

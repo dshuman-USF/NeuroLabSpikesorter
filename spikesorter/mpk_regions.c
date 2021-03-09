@@ -132,8 +132,8 @@ static int bad_start;
 double detection_threshold;
 static int *cluster_spikestart;
 int starting_sample;
-/* SpikeData *spikedata; */
-/* float **spike_waveform; */
+SpikeData *spikedata;
+float **spike_waveform;
 int spike_count, spikedata_alloc;
 extern double cdf[SNAPLEN][CDFSZ];
 static double dmap[SNAPLEN][CDFSZ];

@@ -812,6 +812,9 @@ proc get_bounds {chanidx} {
 	exp_send "cat bounds 2> /dev/null; echo X\r"
 	expect -re {echo X[\r\n]+([^X]*)X[\r\n]+.*\$[^ ]* } {
 	    set bounds $expect_out(1,string)
+       regsub -all {\u001b\[\?2004h\u001b\]0;} $bounds "" bounds
+       regsub -all {\u001b\[\?2004l} $bounds "" bounds
+       regsub -all {\u0007} $bounds "" bounds
 	}
     }
     return $bounds

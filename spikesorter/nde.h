@@ -127,8 +127,8 @@ struct SpikeData
   unsigned int overlapped:1;
 };
 
-SpikeData *spikedata;
-float **spike_waveform;
+extern SpikeData *spikedata;
+extern float **spike_waveform;
 extern int spike_count, spikedata_alloc;
  
 struct SnapVals

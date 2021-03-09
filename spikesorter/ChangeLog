@@ -1,3 +1,23 @@
+2020-10-30  dshuman@usf.edu
+
+	* spikesort_control_panel.in: The command in get_bounds "cat bounds. . . "
+	recently started embedding control codes in the output. The terminal, the
+	shell, don't know. This broke picking up the numbers, so the codes are now
+	filtered out of the text returned to expect.
+	* configure.ac: Bump to 1.18.3
+
+2020-10-26  dshuman@usf.edu
+
+	* mpk_regions.c: remove commented out lines spikedata and spike_waveform
+	because they only need to be defined in one place, and they are in nde.h,
+	which causes multiple defines. I don't see how this ever worked unless
+	earlier versions of the compiler allowed this.
+	* nde.h: Add extern in from of spikedata and spike_waveform. See above.
+
+2020-06-10  dshuman@usf.edu
+
+	* configure.ac: No code changes, new libgsl breaks the package.
+
 2020-02-19  dshuman@usf.edu
 
 	* Makefile.am: Add in support for github and GPL notices.

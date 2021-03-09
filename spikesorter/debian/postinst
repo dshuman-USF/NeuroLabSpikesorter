@@ -20,7 +20,7 @@ set -e
 # Do not edit postinst, edit postinst.template
 # postinst will be created from it.
 
-new_version="0.18.1"
+new_version="0.18.3"
 
 case "$1" in
     configure)

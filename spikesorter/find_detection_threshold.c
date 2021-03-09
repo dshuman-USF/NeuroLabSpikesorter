@@ -31,7 +31,7 @@
 #include <limits.h>
 
 static int sample_count, noise_count;
-double mean;
+extern double mean;
 static short *mapbuf, *bufp;
 
 #define SZ SNAPLEN
